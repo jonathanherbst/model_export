@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Error = enum {
+const Error = error{
     UnknownColumn,
     InvalidIntegerSize,
 };
@@ -22,11 +22,11 @@ const FieldType = enum {
         switch (cdft) {
             .int => {
                 if (size) |s| {
-                    switch (s.unsigned) {
-                        8 => if (s.unsigned) return FieldType.U8 else FieldType.S8,
-                        16 => if (s.unsigned) return FieldType.U16 else FieldType.S16,
-                        32 => if (s.unsigned) return FieldType.U32 else FieldType.S32,
-                        64 => if (s.unsigned) return FieldType.U64 else FieldType.S64,
+                    switch (s.size) {
+                        8 => if (s.unsigned) return FieldType.U8 else return FieldType.S8,
+                        16 => if (s.unsigned) return FieldType.U16 else return FieldType.S16,
+                        32 => if (s.unsigned) return FieldType.U32 else return FieldType.S32,
+                        64 => if (s.unsigned) return FieldType.U64 else return FieldType.S64,
                         else => return Error.InvalidIntegerSize,
                     }
                 }
@@ -46,16 +46,37 @@ const Column = struct {
     array: ?usize,
 };
 
-const DBD = struct {
-    columns: std.ArrayList(Column),
+pub const SchemaSelector = union(enum) {
+    build: []const u8,
+    layout: []const u8,
 
-    pub fn from_reader(path: []const u8, build: []const u8, allocator: std.mem.Allocator) !DBD {
-        const build_ver = BuildVersion.from_string(build);
+    pub fn to_build_version(self: @This()) ?BuildVersion {
+        switch (self) {
+            .build => |build_str| {
+                return BuildVersion.from_string(build_str);
+            },
+            else => {
+                return null;
+            },
+        }
+    }
+};
+
+pub const DBD = struct {
+    columns: std.array_list.AlignedManaged(Column, null),
+    allocator: std.mem.Allocator,
+
+    pub fn from_reader(path: []const u8, selector: SchemaSelector, allocator: std.mem.Allocator) !DBD {
+        const maybe_build_ver = selector.to_build_version();
         const stat = try std.fs.cwd().statFile(path);
         const data = try std.fs.cwd().readFileAlloc(allocator, path, stat.size);
+        errdefer allocator.free(data);
 
         var column_defs = std.StringHashMap(ColumnDef).init(allocator);
+        defer column_defs.deinit();
+
         var columns = std.array_list.Managed(Column).init(allocator);
+        errdefer columns.deinit();
 
         var lines = std.mem.splitScalar(u8, data, '\n');
         var state: enum { column_defs, builds, build_select, nothing } = .nothing;
@@ -73,26 +94,37 @@ const DBD = struct {
                 continue;
             } else if (std.mem.startsWith(u8, line, "LAYOUT ")) {
                 state = .builds;
+                switch (selector) {
+                    .layout => |selected_hash| {
+                        const layout_hash = std.mem.trim(u8, line[7..], " \t");
+                        if (std.mem.eql(u8, selected_hash, layout_hash)) {
+                            state = .build_select;
+                        }
+                    },
+                    else => {},
+                }
             } else if (std.mem.startsWith(u8, line, "BUILD ")) {
                 if (state != .build_select) {
                     state = .builds;
-                    var build_it = std.mem.splitScalar(u8, line[6..], ',');
-                    while (build_it.next()) |build_str| {
-                        if (build_ver.eql(BuildVersion.from_string(build_str))) {
-                            state = .build_select;
+                    if (maybe_build_ver) |build_ver| {
+                        var build_it = std.mem.splitScalar(u8, line[6..], ',');
+                        while (build_it.next()) |build_str| {
+                            if (build_ver.eql(BuildVersion.from_string(build_str))) {
+                                state = .build_select;
+                            }
                         }
                     }
                 }
             } else if (state == .column_defs) {
                 if (ColumnDef.from_string(line)) |column_def| {
-                    column_defs.put(column_def.name, column_def);
+                    try column_defs.put(column_def.name, column_def);
                 }
             } else if (state == .build_select) {
                 if (RecordColumnDef.from_string(line)) |record_column_def| {
                     // build the record here
                     if (column_defs.get(record_column_def.column_name)) |column_def| {
-                        columns.append(Column{
-                            .name = record_column_def.column_name,
+                        try columns.append(.{
+                            .name = try allocator.dupe(u8, record_column_def.column_name),
                             .field_type = try FieldType.from_parts(column_def.field_type, record_column_def.size),
                             .annotations = record_column_def.annotations,
                             .array = record_column_def.array_length,
@@ -103,6 +135,18 @@ const DBD = struct {
                 }
             }
         }
+
+        return .{
+            .columns = columns,
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: @This()) void {
+        for (self.columns.items) |column| {
+            self.allocator.free(column.name);
+        }
+        self.columns.deinit();
     }
 };
 
