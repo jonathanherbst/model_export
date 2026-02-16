@@ -1,0 +1,11 @@
+# vscode crap
+.vscode
+
+# zig
+zig-out
+.zig-cache
+
+# testing artifacts
+*.db2
+*.dbd
+*.csv
