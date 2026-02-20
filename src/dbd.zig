@@ -37,9 +37,17 @@ const FieldType = enum {
             .locstring => return FieldType.LocString,
         }
     }
+
+    pub fn is_string(self: @This()) bool {
+        switch (self) {
+            .LocString => return true,
+            .String => return true,
+            else => return false,
+        }
+    }
 };
 
-const Column = struct {
+pub const Column = struct {
     name: []const u8,
     field_type: FieldType,
     annotations: Annotations,
@@ -63,6 +71,7 @@ pub const SchemaSelector = union(enum) {
 };
 
 pub const DBD = struct {
+    id_index: usize,
     columns: std.array_list.AlignedManaged(Column, null),
     allocator: std.mem.Allocator,
 
@@ -80,6 +89,7 @@ pub const DBD = struct {
 
         var lines = std.mem.splitScalar(u8, data, '\n');
         var state: enum { column_defs, builds, build_select, nothing } = .nothing;
+        var id_index: usize = 0;
         while (lines.next()) |line_raw| {
             const line = std.mem.trim(u8, line_raw, " \t\r\n");
             if (line.len == 0) {
@@ -129,6 +139,9 @@ pub const DBD = struct {
                             .annotations = record_column_def.annotations,
                             .array = record_column_def.array_length,
                         });
+                        if (columns.getLast().annotations.id) {
+                            id_index = columns.items.len - 1;
+                        }
                     } else {
                         return Error.UnknownColumn;
                     }
@@ -137,6 +150,7 @@ pub const DBD = struct {
         }
 
         return .{
+            .id_index = id_index,
             .columns = columns,
             .allocator = allocator,
         };
@@ -147,6 +161,18 @@ pub const DBD = struct {
             self.allocator.free(column.name);
         }
         self.columns.deinit();
+    }
+
+    pub fn num_columns(self: @This()) usize {
+        return self.columns.items.len - 1;
+    }
+
+    pub fn get_column(self: @This(), index: usize) Column {
+        if (index < self.id_index) {
+            return self.columns.items[index];
+        } else {
+            return self.columns.items[index + 1];
+        }
     }
 };
 

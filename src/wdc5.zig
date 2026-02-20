@@ -249,9 +249,7 @@ const Section = struct {
     }
 
     pub fn get_string(self: @This(), index: usize) [*:0]const u8 {
-        std.debug.assert(!self.file.has_variable_records());
-        const offset = self.file.header.record_size * self.header.record_count + index;
-        return @ptrCast(self.record_data_region()[offset..]);
+        return @ptrCast(&self.string_region.?[index]);
     }
 
     fn offset_map(self: @This()) []const OffsetMapEntry {
@@ -322,7 +320,7 @@ pub const Field = union(enum) {
     unsigned: u64,
 };
 
-const FixedRecord = struct {
+pub const FixedRecord = struct {
     id: ?u32,
     fields: []const FieldStorageInfo,
     data: BitBuffer,

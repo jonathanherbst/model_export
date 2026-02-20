@@ -3,6 +3,7 @@ const std = @import("std");
 const clap = @import("clap");
 
 const dbd = @import("dbd.zig");
+const dbd_db2 = @import("defined_db2.zig");
 const wdc5 = @import("wdc5.zig");
 
 const Stdout = struct {
@@ -61,23 +62,58 @@ fn print_db2_info(wdc5_file: wdc5.File, maybe_dbd_def: ?dbd.DBD, writer: *Stdout
     }
 }
 
-fn print_records(wdc5_file: *wdc5.File, stdout: *Stdout) !void {
+fn print_records(wdc5_file: *wdc5.File, maybe_dbd_def: ?dbd.DBD, stdout: *Stdout) !void {
     var records = try wdc5_file.records();
     while (records.next()) |record| {
         stdout.print("{}:", .{record.get_id()});
-        for (0..record.num_fields()) |idx| {
-            const field = record.get_field(idx);
-            switch (field) {
-                .bytes => |v| stdout.print(" {X}", .{v}),
-                .indexed => |v| {
-                    stdout.print(" [{}", .{v[0]});
-                    for (v[1..]) |num| {
-                        stdout.print(", {}", .{num});
+        if (maybe_dbd_def) |dbd_def| {
+            const dbd_record: dbd_db2.DefinedRecord = .{
+                .record = record,
+                .schema = dbd_def,
+            };
+
+            for (0..dbd_record.num_fields()) |idx| {
+                const field = dbd_record.get_field(idx);
+                if (field.num_values() == 1) {
+                    switch (field.get_value(0)) {
+                        .float => |v| stdout.print(" {}", .{v}),
+                        .signed => |v| stdout.print(" {}", .{v}),
+                        .unsigned => |v| stdout.print(" {}", .{v}),
+                        .string => |v| stdout.print(" \"{s}\"", .{v}),
+                    }
+                } else {
+                    switch (field.get_value(0)) {
+                        .float => |v| stdout.print(" [{}", .{v}),
+                        .signed => |v| stdout.print(" [{}", .{v}),
+                        .unsigned => |v| stdout.print(" [{}", .{v}),
+                        .string => |v| stdout.print(" [\"{s}\"", .{v}),
+                    }
+                    for (1..field.num_values()) |field_idx| {
+                        switch (field.get_value(field_idx)) {
+                            .float => |v| stdout.print(", {}", .{v}),
+                            .signed => |v| stdout.print(", {}", .{v}),
+                            .unsigned => |v| stdout.print(", {}", .{v}),
+                            .string => |v| stdout.print(", \"{s}\"", .{v}),
+                        }
                     }
                     stdout.print("]", .{});
-                },
-                .signed => |v| stdout.print(" {}", .{v}),
-                .unsigned => |v| stdout.print(" {}", .{v}),
+                }
+            }
+        } else {
+            for (0..record.num_fields()) |idx| {
+                const field = record.get_field(idx);
+                switch (field) {
+                    .bytes => |v| stdout.print(" {X}", .{v}),
+                    .indexed => |v| {
+                        stdout.print(" [{}", .{v[0]});
+                        for (v[1..]) |num| {
+                            stdout.print(", {}", .{num});
+                        }
+                        stdout.print("]", .{});
+                    },
+                    .signed => |v| stdout.print(" {}", .{v}),
+                    .unsigned => |v| stdout.print(" {}", .{v}),
+                }
             }
         }
         stdout.print("\n", .{});
@@ -127,7 +163,7 @@ pub fn main() !void {
     }
 
     if (res.args.records != 0) {
-        try print_records(&wdc5_file, &stdout);
+        try print_records(&wdc5_file, dbd_def, &stdout);
     } else {
         print_db2_info(wdc5_file, dbd_def, &stdout);
     }
