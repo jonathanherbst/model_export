@@ -59,6 +59,28 @@ pub fn build(b: *std.Build) void {
         cmd_db2util.addArgs(args);
     }
 
+    // cascutil executable to interact with casc files
+    const cascutil = b.addExecutable(.{
+        .name = "cascutil",
+        .use_llvm = true,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/cascutil.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    cascutil.root_module.addImport("clap", clap.module("clap"));
+    const install_cascutil = b.addInstallArtifact(cascutil, .{});
+
+    // setup a step for the cascutil so we can run it
+    const run_cascutil = b.step("cascutil", "Run cascutil");
+    const cmd_cascutil = b.addRunArtifact(cascutil);
+    run_cascutil.dependOn(&cmd_cascutil.step);
+    cmd_cascutil.step.dependOn(&install_cascutil.step);
+    if (b.args) |args| {
+        cmd_cascutil.addArgs(args);
+    }
+
     // tests
     // const mod_tests = b.addTest(.{
     //     .root_module = mod,
