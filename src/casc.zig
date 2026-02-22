@@ -28,11 +28,12 @@ pub const Error = error{
 
 pub const Casc = struct {
     handle: casclib.HANDLE,
+    listfile_path: [*:0]const u8,
 
-    pub fn open_local(path: [*:0]const u8) Error!Casc {
+    pub fn open_local(path: [*:0]const u8, listfile_path: [*:0]const u8) Error!@This() {
         var handle: casclib.HANDLE = casclib.INVALID_HANDLE_VALUE;
         if (casclib.CascOpenStorage(path, 0, &handle) and handle != casclib.INVALID_HANDLE_VALUE) {
-            return Casc{ .handle = handle };
+            return .{ .handle = handle, .listfile_path = listfile_path };
         } else {
             const code = try get_error();
             std.log.warn("got an unknown error: {}", .{code});
@@ -40,14 +41,14 @@ pub const Casc = struct {
         }
     }
 
-    pub fn close(self: Casc) void {
+    pub fn close(self: @This()) void {
         _ = casclib.CascCloseStorage(self.handle);
     }
 
-    pub fn product(self: Casc) !casclib.CASC_STORAGE_PRODUCT {
-        var data: casclib.CASC_STORAGE_PRODUCT = undefined;
+    pub fn product_info(self: Casc) !ProductInfo {
+        var data: ProductInfo = undefined;
         var output_size: usize = 0;
-        if (casclib.CascGetStorageInfo(self.handle, casclib.CascStorageProduct, &data, @sizeOf(casclib.CASC_STORAGE_PRODUCT), &output_size)) {
+        if (casclib.CascGetStorageInfo(self.handle, casclib.CascStorageProduct, &data.inner, @sizeOf(casclib.CASC_STORAGE_PRODUCT), &output_size)) {
             std.debug.assert(output_size == @sizeOf(casclib.CASC_STORAGE_PRODUCT));
             return data;
         } else {
@@ -55,9 +56,9 @@ pub const Casc = struct {
         }
     }
 
-    pub fn files(self: Casc, mask: [*:0]const u8, list_file_path: [*:0]const u8) !FileSequence {
+    pub fn files(self: Casc, mask: [*:0]const u8) !FileSequence {
         var file_data: FileData = undefined;
-        const handle: casclib.HANDLE = casclib.CascFindFirstFile(self.handle, mask, @ptrCast(&file_data), list_file_path);
+        const handle: casclib.HANDLE = casclib.CascFindFirstFile(self.handle, mask, @ptrCast(&file_data), self.listfile_path);
         if (handle != casclib.INVALID_HANDLE_VALUE) {
             return FileSequence{ .handle = handle, .data = file_data };
         } else {
@@ -135,6 +136,19 @@ pub const FileSequence = struct {
 
     pub fn close(self: FileSequence) void {
         _ = casclib.CascFindClose(self.handle);
+    }
+};
+
+const ProductInfo = struct {
+    inner: casclib.CASC_STORAGE_PRODUCT,
+
+    pub fn code_name(self: @This()) [*:0]const u8 {
+        std.debug.assert(std.mem.indexOfScalar(u8, &self.inner.szCodeName, 0) != null);
+        return @as([*:0]const u8, @ptrCast(&self.inner.szCodeName));
+    }
+
+    pub fn build(self: @This()) u32 {
+        return self.inner.BuildNumber;
     }
 };
 

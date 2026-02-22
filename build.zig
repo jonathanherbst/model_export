@@ -69,6 +69,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    cascutil.linkLibrary(casclib.artifact("casc"));
     cascutil.root_module.addImport("clap", clap.module("clap"));
     const install_cascutil = b.addInstallArtifact(cascutil, .{});
 
