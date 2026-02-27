@@ -40,7 +40,11 @@ fn print_db2_info(wdc5_file: wdc5.File, maybe_dbd_def: ?dbd.DBD, writer: *Stdout
     writer.print("{} section(s), {} records of {} bytes with {} fields\n", .{ wdc5_file.header.section_count, wdc5_file.header.record_count, wdc5_file.header.record_size, wdc5_file.header.field_count });
     writer.print("{} bytes of pallet data, {} bytes of common data\n", .{ wdc5_file.header.pallet_data_size, wdc5_file.header.common_data_size });
 
-    writer.print("field info: id idx({})\n", .{wdc5_file.header.id_index});
+    if (wdc5_file.has_noninline_ids()) {
+        writer.print("field info: non inline ids\n", .{});
+    } else {
+        writer.print("field info: id idx({})\n", .{wdc5_file.header.id_index});
+    }
     var idx: usize = 0;
     for (wdc5_file.field_storage_infos()) |field| {
         if (maybe_dbd_def) |dbd_def| {
@@ -58,7 +62,7 @@ fn print_db2_info(wdc5_file: wdc5.File, maybe_dbd_def: ?dbd.DBD, writer: *Stdout
 
     writer.print("sections:\n", .{});
     for (wdc5_file.section_headers()) |sec| {
-        writer.print("\thash: 0x{x}, records: {}, noninline ids: {}, rel data: {} bytes, copy entries: {}\n", .{ sec.tact_key_hash, sec.record_count, sec.id_list_size, sec.relationship_data_size, sec.copy_table_count });
+        writer.print("\thash: 0x{x}, records: {}, noninline ids: {}, rel data: {} bytes, copy entries: {}\n", .{ sec.tact_key_hash, sec.record_count, sec.id_list_size / 4, sec.relationship_data_size, sec.copy_table_count });
     }
 }
 

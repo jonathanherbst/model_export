@@ -14,6 +14,7 @@ pub const DefinedRecord = struct {
 
     pub fn get_field(self: @This(), index: usize) DefinedField {
         return .{
+            .index = index,
             .column = self.schema.get_column(index),
             .field = self.record.get_field(index),
             .record = self.record,
@@ -29,6 +30,7 @@ const Value = union(enum) {
 };
 
 const DefinedField = struct {
+    index: usize,
     column: dbd.Column,
     field: wdc5.Field,
     record: wdc5.FixedRecord,
@@ -38,6 +40,10 @@ const DefinedField = struct {
     }
 
     pub fn get_value(self: @This(), index: usize) Value {
+        if (self.column.field_type == .String or self.column.field_type == .LocString) {
+            std.debug.assert(self.num_values() == 1);
+            return .{ .string = std.mem.span(self.record.get_field_as_string(self.index)) };
+        }
         switch (self.field) {
             .bytes => |v| {
                 switch (self.column.field_type) {
@@ -50,7 +56,7 @@ const DefinedField = struct {
                     .U64 => return .{ .unsigned = std.mem.readInt(u64, v[0..8], .little) },
                     .S64 => return .{ .signed = std.mem.readInt(i64, v[0..8], .little) },
                     .Float => return .{ .float = @bitCast(std.mem.readInt(u32, v[0..4], .little)) },
-                    .String, .LocString => return .{ .string = v },
+                    .String, .LocString => unreachable,
                 }
             },
             .signed => |v| {
@@ -59,7 +65,7 @@ const DefinedField = struct {
             .unsigned => |v| {
                 switch (self.column.field_type) {
                     .Float => return .{ .float = @bitCast(@as(u32, @intCast(v))) },
-                    .String, .LocString => return .{ .string = std.mem.span(self.record.section.get_string(v)) },
+                    .String, .LocString => unreachable,
                     else => return .{ .unsigned = v },
                 }
             },
@@ -68,7 +74,7 @@ const DefinedField = struct {
                     .U8, .U16, .U32, .U64 => return .{ .unsigned = @intCast(v[index]) },
                     .S8, .S16, .S32, .S64 => return .{ .signed = @as(i32, @bitCast(v[index])) },
                     .Float => return .{ .float = @as(f32, @bitCast(v[index])) },
-                    .String, .LocString => return .{ .string = std.mem.span(self.record.section.get_string(v[index])) },
+                    .String, .LocString => unreachable,
                 }
             },
         }

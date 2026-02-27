@@ -37,8 +37,6 @@ pub const File = struct {
 
         // don't know how to deal with variable record data yet
         std.debug.assert((header.flags & 0x01 == 0));
-        // don't know how to deal with inlined ids yet
-        std.debug.assert((header.flags & 0x04 == 0));
         // don't know what to do if some fields aren't defined by field storage info yet
         std.debug.assert(header.field_count == header.field_storage_info_size / @sizeOf(FieldStorageInfo));
 
@@ -209,20 +207,23 @@ const Section = struct {
         // load the relationship (foreign key) map
         var foreign_key_map = std.AutoHashMap(u32, u32).init(allocator);
         errdefer foreign_key_map.deinit();
-        var rel_offset = record_section_size + header.id_list_size + header.copy_table_count * @sizeOf(CopyTableEntry) + header.offset_map_id_count * @sizeOf(OffsetMapEntry);
-        if (file.has_relationship_data()) {
-            rel_offset += header.offset_map_id_count * 4;
-        }
-        const rel_mapping = std.mem.bytesAsValue(RelationshipMapping, cache[rel_offset .. rel_offset + @sizeOf(RelationshipMapping)]);
-        rel_offset += @sizeOf(RelationshipMapping);
-        const rel_entries: []const RelationshipEntry = @ptrCast(@alignCast(cache[rel_offset .. rel_offset + @sizeOf(RelationshipEntry) * rel_mapping.num_entries]));
-        try foreign_key_map.ensureTotalCapacity(rel_mapping.num_entries);
-        for (rel_entries) |entry| {
-            try foreign_key_map.put(entry.foreign_id, entry.record_index);
+        if (header.relationship_data_size > 0) {
+            var rel_offset = record_section_size + header.id_list_size + header.copy_table_count * @sizeOf(CopyTableEntry) + header.offset_map_id_count * @sizeOf(OffsetMapEntry);
+            if (file.has_relationship_data()) {
+                rel_offset += header.offset_map_id_count * 4;
+            }
+            const rel_mapping = std.mem.bytesAsValue(RelationshipMapping, cache[rel_offset .. rel_offset + @sizeOf(RelationshipMapping)]);
+            rel_offset += @sizeOf(RelationshipMapping);
+            const rel_entries: []const RelationshipEntry = @ptrCast(@alignCast(cache[rel_offset .. rel_offset + @sizeOf(RelationshipEntry) * rel_mapping.num_entries]));
+            try foreign_key_map.ensureTotalCapacity(rel_mapping.num_entries);
+            for (rel_entries) |entry| {
+                try foreign_key_map.put(entry.foreign_id, entry.record_index);
+            }
         }
 
         // get a slice to the id list
-        const id_list: []const u32 = @ptrCast(@alignCast(cache[record_section_size .. record_section_size + header.id_list_size]));
+        const id_list = try allocator.alloc(u32, header.id_list_size / 4);
+        @memcpy(@as([]u8, @ptrCast(id_list)), cache[record_section_size .. record_section_size + header.id_list_size]);
 
         return .{
             .file = file,
@@ -241,6 +242,7 @@ const Section = struct {
     pub fn deinit(self: *@This()) void {
         self.foreign_key_map.deinit();
         self.copy_table.deinit();
+        self.allocator.free(self.id_list);
         self.allocator.free(self.cache);
     }
 
@@ -305,8 +307,12 @@ const SectionRecordIter = struct {
         if ((self.index + record_size) <= self.section.record_region.len) {
             const index = self.index;
             self.index += record_size;
+            var id: ?u32 = null;
+            if (self.section.file.has_noninline_ids()) {
+                id = self.section.id_list[index / record_size];
+            }
             const field_data = self.section.record_region[index .. index + record_size];
-            return .{ .id = null, .fields = self.section.file.field_storage_infos(), .data = BitBuffer.from_buffer(field_data), .section = self.section };
+            return .{ .id = id, .fields = self.section.file.field_storage_infos(), .data = BitBuffer.from_buffer(field_data), .section = self.section, .index = index };
         } else {
             return null;
         }
@@ -325,6 +331,7 @@ pub const FixedRecord = struct {
     fields: []const FieldStorageInfo,
     data: BitBuffer,
     section: Section,
+    index: usize,
 
     pub fn is_id_inline(self: @This()) bool {
         return self.id == null;
@@ -364,6 +371,38 @@ pub const FixedRecord = struct {
             } else {
                 return self.get_field_with_id(index + 1);
             }
+        }
+    }
+
+    pub fn get_field_as_string(self: @This(), index: usize) [*:0]const u8 {
+        var string_index: usize = 0;
+        switch (self.get_field(index)) {
+            .bytes => |value| {
+                if (value.len == 4) {
+                    string_index = std.mem.readInt(u32, value[0..4], .little);
+                } else {
+                    std.debug.panic("unknown conversion from bytes of len {} to string offset", .{value.len});
+                }
+            },
+            .signed => |value| {
+                string_index = @intCast(value);
+            },
+            .unsigned => |value| {
+                string_index = value;
+            },
+            .indexed => |value| {
+                string_index = value[0];
+            },
+        }
+
+        if (string_index == 0) {
+            return "";
+        } else {
+            // string indexes are referenced from the where the field begins in the record.
+            // calculate the index from the beginning of the record.
+            const record_index = string_index + self.index + self.fields[index].field_offset_bits / 8;
+            // get_string indexes from the string block
+            return self.section.get_string(record_index - self.section.record_region.len);
         }
     }
 
