@@ -33,6 +33,7 @@ pub fn main() !void {
         std.debug.print("unable to get listfile\n", .{});
         return;
     }
+    defer allocator.free(listfile_path.?);
 
     const casc_obj = casc.Casc.open_local(casc_path.?, @ptrCast(listfile_path.?)) catch |err| {
         std.debug.print("Failed to open casclib: {}\n", .{err});
@@ -73,6 +74,33 @@ fn list_command(casc_obj: casc.Casc, path_specifier: [*:0]const u8, writer: *std
     }
 }
 
+fn extract_command(casc_obj: casc.Casc, path_specifier: [*:0]const u8, writer: *std.Io.Writer) !void {
+    var files = try casc_obj.files(path_specifier);
+    defer files.close();
+    while (try files.next()) |file_data| {
+        const file_path: [*:0]const u8 = @ptrCast(&file_data.name);
+        var file = try casc_obj.open_file(&file_data);
+
+        const file_name = std.fs.path.basenameWindows(std.mem.span(file_path));
+
+        const out_file = try std.fs.cwd().createFile(file_name, .{ .truncate = true });
+        defer out_file.close();
+
+        var buffer: [4096]u8 = undefined;
+        var file_size: usize = 0;
+        var read_len = try file.read(&buffer);
+        while (read_len > 0) {
+            try out_file.writeAll(buffer[0..read_len]);
+            file_size += read_len;
+            read_len = try file.read(&buffer);
+        }
+
+        std.debug.assert(file_size == file_data.file_size);
+
+        try writer.print("extracted {} bytes to {s}\n", .{ file_size, file_name });
+    }
+}
+
 fn handleCommand(casc_obj: casc.Casc, allocator: std.mem.Allocator, input: []const u8, writer: *std.Io.Writer) !void {
     var iter = std.mem.splitSequence(u8, input, " ");
     const command = iter.next() orelse return;
@@ -84,11 +112,18 @@ fn handleCommand(casc_obj: casc.Casc, allocator: std.mem.Allocator, input: []con
         try writer.print("  help                - Show this help message\n", .{});
         try writer.print("  exit/quit           - Exit the utility\n", .{});
         try writer.print("  ls <path_specifier> - List files that match the path specifier\n", .{});
+        try writer.print("  x <path>            - Extract a file to the cwd\n", .{});
     } else if (std.mem.eql(u8, command, "ls")) {
         if (iter.next()) |path_specifier| {
             const path = try allocator.dupeZ(u8, path_specifier);
             defer allocator.free(path);
             try list_command(casc_obj, path, writer);
+        }
+    } else if (std.mem.eql(u8, command, "x")) {
+        if (iter.next()) |path_nondelim| {
+            const path = try allocator.dupeZ(u8, path_nondelim);
+            defer allocator.free(path);
+            try extract_command(casc_obj, path, writer);
         }
     } else {
         try writer.print("Unknown command: '{s}'\n", .{command});

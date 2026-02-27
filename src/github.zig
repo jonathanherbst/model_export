@@ -105,15 +105,16 @@ pub fn fetch_latest_release(path: []const u8, release_url: []const u8, allocator
         std.fs.cwd().makePath(cache_dir) catch {};
     }
 
-    const listfiles_release = Releases.fromUrl(release_url, allocator) catch |err| {
+    const releases = Releases.fromUrl(release_url, allocator) catch |err| {
         log.warn("unable to fetch {s} releases - {}", .{ asset_name, err });
         std.fs.cwd().access(path, .{ .mode = .read_only }) catch {
             return false;
         };
         return true;
     };
+    defer releases.deinit();
 
-    if (listfiles_release.latest()) |release| {
+    if (releases.latest()) |release| {
         if (release.get_asset(asset_name)) |asset| {
             if (asset.get_sha256_digest()) |digest| {
                 if (validate_file_sha256(path, digest)) {

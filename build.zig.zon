@@ -33,8 +33,8 @@
     // internet connectivity.
     .dependencies = .{
         .casclib = .{
-            .url = "git+https://github.com/jonathanherbst/CascLib.git?ref=zig#98143e712e623b4674580ac5c2f113700ac6b5c9",
-            .hash = "casclib-3.0.0-Q_aZLCphJADmU09ulMA_usHb8T-aWwTlbHqCEqXqkLEC",
+            .url = "git+https://github.com/jonathanherbst/CascLib.git?ref=zig#ba638560f303aa0fa23462f5302eac17e502ff71",
+            .hash = "casclib-3.0.0-Q_aZLNRiJABURhP6RY0rBdDbEpf_3P_nja02swRIjxd3",
         },
         .zdt = .{
             .url = "git+https://codeberg.org/FObersteiner/zdt.git?ref=zig-0.15#d8e6b8a4d72aff2348d290130419dc49d654478d",

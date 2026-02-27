@@ -9,6 +9,7 @@ pub fn get_best_listfile(cache_dir: []const u8, allocator: std.mem.Allocator) ?[
     if (github.fetch_latest_release(path, "https://api.github.com/repos/wowdev/wow-listfile/releases", allocator)) {
         return path;
     }
+    allocator.free(path);
     return null;
 }
 
@@ -20,5 +21,6 @@ pub fn get_best_dbd_package(cache_dir: []const u8, allocator: std.mem.Allocator)
     if (github.fetch_latest_release(path, "https://api.github.com/repos/wowdev/WoWDBDefs/releases", allocator)) {
         return path;
     }
+    allocator.free(path);
     return null;
 }

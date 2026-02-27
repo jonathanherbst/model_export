@@ -69,7 +69,7 @@ pub const Casc = struct {
 
     pub fn open_file(self: Casc, data: *const FileData) !File {
         var file_handle: casclib.HANDLE = null;
-        if (casclib.CascOpenFile(self.handle, &data.name, casclib.CASC_LOCALE_NONE, casclib.CASC_OPEN_BY_NAME, &file_handle) and
+        if (casclib.CascOpenFile(self.handle, &data.ckey, casclib.CASC_LOCALE_NONE, casclib.CASC_OPEN_BY_CKEY, &file_handle) and
             file_handle != casclib.INVALID_HANDLE_VALUE)
         {
             return File{ .handle = file_handle };
@@ -121,6 +121,7 @@ pub const FileSequence = struct {
 
     pub fn next(self: *FileSequence) !?FileData {
         if (self.data) |file_data| {
+            const return_data = file_data;
             if (!casclib.CascFindNextFile(self.handle, @ptrCast(&self.data))) {
                 self.data = null;
                 if (get_error()) |_| {} else |err| {
@@ -129,7 +130,7 @@ pub const FileSequence = struct {
                     }
                 }
             }
-            return file_data;
+            return return_data;
         }
         return null;
     }
@@ -142,7 +143,7 @@ pub const FileSequence = struct {
 const ProductInfo = struct {
     inner: casclib.CASC_STORAGE_PRODUCT,
 
-    pub fn code_name(self: @This()) [*:0]const u8 {
+    pub fn code_name(self: *const @This()) [*:0]const u8 {
         std.debug.assert(std.mem.indexOfScalar(u8, &self.inner.szCodeName, 0) != null);
         return @as([*:0]const u8, @ptrCast(&self.inner.szCodeName));
     }
