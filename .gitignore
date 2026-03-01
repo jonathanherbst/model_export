@@ -9,3 +9,5 @@ zig-out
 *.db2
 *.dbd
 *.csv
+dbd
+*.zip

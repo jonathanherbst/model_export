@@ -28,12 +28,12 @@ pub const Error = error{
 
 pub const Casc = struct {
     handle: casclib.HANDLE,
-    listfile_path: [*:0]const u8,
+    listfile_path: ?[*:0]const u8,
 
-    pub fn open_local(path: [*:0]const u8, listfile_path: [*:0]const u8) Error!@This() {
+    pub fn open_local(path: [*:0]const u8) Error!@This() {
         var handle: casclib.HANDLE = casclib.INVALID_HANDLE_VALUE;
         if (casclib.CascOpenStorage(path, 0, &handle) and handle != casclib.INVALID_HANDLE_VALUE) {
-            return .{ .handle = handle, .listfile_path = listfile_path };
+            return .{ .handle = handle, .listfile_path = null };
         } else {
             const code = try get_error();
             std.log.warn("got an unknown error: {}", .{code});
@@ -56,20 +56,43 @@ pub const Casc = struct {
         }
     }
 
+    pub fn set_listfile(self: *@This(), path: [*:0]const u8) void {
+        self.listfile_path = path;
+    }
+
     pub fn files(self: Casc, mask: [*:0]const u8) !FileSequence {
-        var file_data: FileData = undefined;
-        const handle: casclib.HANDLE = casclib.CascFindFirstFile(self.handle, mask, @ptrCast(&file_data), self.listfile_path);
-        if (handle != casclib.INVALID_HANDLE_VALUE) {
-            return FileSequence{ .handle = handle, .data = file_data };
+        if (self.listfile_path) |listfile_path| {
+            var file_data: FileData = undefined;
+            const handle: casclib.HANDLE = casclib.CascFindFirstFile(self.handle, mask, @ptrCast(&file_data), listfile_path);
+            if (handle != casclib.INVALID_HANDLE_VALUE) {
+                return FileSequence{ .handle = handle, .data = file_data };
+            } else {
+                _ = get_error() catch |err| {
+                    if (err != Error.FileNotFound) {
+                        return err;
+                    }
+                };
+            }
+        }
+        return .{ .handle = null, .data = null };
+    }
+
+    pub fn open_file(self: Casc, data: *const FileData) !File {
+        var file_handle: casclib.HANDLE = null;
+        if (casclib.CascOpenFile(self.handle, &data.ckey, casclib.CASC_LOCALE_NONE, casclib.CASC_OPEN_BY_CKEY | casclib.CASC_OVERCOME_ENCRYPTED, &file_handle) and
+            file_handle != casclib.INVALID_HANDLE_VALUE)
+        {
+            return File{ .handle = file_handle };
         } else {
             _ = try get_error();
             return Error.FileNotFound;
         }
     }
 
-    pub fn open_file(self: Casc, data: *const FileData) !File {
+    pub fn open_file_by_id(self: Casc, id: u32) !File {
         var file_handle: casclib.HANDLE = null;
-        if (casclib.CascOpenFile(self.handle, &data.ckey, casclib.CASC_LOCALE_NONE, casclib.CASC_OPEN_BY_CKEY | casclib.CASC_OVERCOME_ENCRYPTED, &file_handle) and
+        const casc_file_id = casclib.CASC_FILE_DATA_ID(id);
+        if (casclib.CascOpenFile(self.handle, casc_file_id, casclib.CASC_LOCALE_NONE, casclib.CASC_OPEN_BY_FILEID | casclib.CASC_OVERCOME_ENCRYPTED, &file_handle) and
             file_handle != casclib.INVALID_HANDLE_VALUE)
         {
             return File{ .handle = file_handle };
@@ -198,7 +221,7 @@ const FileData = extern struct {
     file_available: c_uint,
     name_type: NameType,
 
-    pub fn get_name(self: FileData) [*:0]const u8 {
+    pub fn get_name(self: *const FileData) [*:0]const u8 {
         return @ptrCast(&self.name);
     }
 };
