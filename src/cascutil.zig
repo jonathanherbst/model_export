@@ -101,18 +101,38 @@ fn extract_command(casc_obj: casc.Casc, path_specifier: [*:0]const u8, writer: *
     }
 }
 
+fn tables_command(casc_obj: casc.Casc, writer: *std.Io.Writer) !void {
+    var files = try casc_obj.files("*.db2");
+    defer files.close();
+    try writer.print("tables: ", .{});
+    if (try files.next()) |file_data| {
+        const file_name = std.fs.path.basenameWindows(std.mem.span(file_data.get_name()));
+        const table_name = std.fs.path.stem(file_name);
+        try writer.print("{s}", .{table_name});
+    }
+    while (try files.next()) |file_data| {
+        const file_name = std.fs.path.basenameWindows(std.mem.span(file_data.get_name()));
+        const table_name = std.fs.path.stem(file_name);
+        try writer.print(", {s}", .{table_name});
+    }
+    try writer.print("\n", .{});
+}
+
+//fn select_command(casc_obj: casc.Casc, args: []const u8, writer: *std.Io.Writer) !void {}
+
 fn handleCommand(casc_obj: casc.Casc, allocator: std.mem.Allocator, input: []const u8, writer: *std.Io.Writer) !void {
     var iter = std.mem.splitSequence(u8, input, " ");
     const command = iter.next() orelse return;
 
-    if (std.mem.eql(u8, command, "exit") or std.mem.eql(u8, command, "quit")) {
+    if (std.mem.eql(u8, command, "exit") or std.mem.eql(u8, command, "quit") or std.mem.eql(u8, command, "e") or std.mem.eql(u8, command, "q")) {
         std.process.exit(0);
     } else if (std.mem.eql(u8, command, "help")) {
         try writer.print("Available commands:\n", .{});
         try writer.print("  help                - Show this help message\n", .{});
-        try writer.print("  exit/quit           - Exit the utility\n", .{});
+        try writer.print("  (e)xit/(q)uit       - Exit the utility\n", .{});
         try writer.print("  ls <path_specifier> - List files that match the path specifier\n", .{});
         try writer.print("  x <path>            - Extract a file to the cwd\n", .{});
+        try writer.print("  tables              - List all the database table in the casc file\n", .{});
     } else if (std.mem.eql(u8, command, "ls")) {
         if (iter.next()) |path_specifier| {
             const path = try allocator.dupeZ(u8, path_specifier);
@@ -125,6 +145,8 @@ fn handleCommand(casc_obj: casc.Casc, allocator: std.mem.Allocator, input: []con
             defer allocator.free(path);
             try extract_command(casc_obj, path, writer);
         }
+    } else if (std.mem.eql(u8, command, "tables")) {
+        try tables_command(casc_obj, writer);
     } else {
         try writer.print("Unknown command: '{s}'\n", .{command});
     }
