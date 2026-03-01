@@ -161,8 +161,6 @@ const Section = struct {
     record_section_size: usize,
 
     pub fn init(file: *File, header: SectionHeader, allocator: std.mem.Allocator) !@This() {
-        // don't know how to deal with encrypted sections yet
-        std.debug.assert(header.tact_key_hash == 0);
         if (file.has_noninline_ids()) {
             std.debug.assert(header.record_count == header.id_list_size / 4);
         }
@@ -301,17 +299,22 @@ const SectionRecordIter = struct {
     }
 
     pub fn next(self: *@This()) ?FixedRecord {
-        const record_size = self.section.file.header.record_size;
-        if (self.index < self.section.header.record_count) {
-            var id: ?u32 = null;
-            if (self.section.file.has_noninline_ids()) {
-                id = self.section.id_list[self.index];
+        if (self.section.header.tact_key_hash == 0) {
+            const record_size = self.section.file.header.record_size;
+            if (self.index < self.section.header.record_count) {
+                var id: ?u32 = null;
+                if (self.section.file.has_noninline_ids()) {
+                    id = self.section.id_list[self.index];
+                }
+                const region_index = self.index * record_size;
+                const field_data = self.section.record_region[region_index .. region_index + record_size];
+                self.index += 1;
+                return .{ .id = id, .fields = self.section.file.field_storage_infos(), .data = BitBuffer.from_buffer(field_data), .section = self.section, .index = region_index };
+            } else {
+                return null;
             }
-            const region_index = self.index * record_size;
-            const field_data = self.section.record_region[region_index .. region_index + record_size];
-            self.index += 1;
-            return .{ .id = id, .fields = self.section.file.field_storage_infos(), .data = BitBuffer.from_buffer(field_data), .section = self.section, .index = region_index };
         } else {
+            // we don't know how to deal with encrypted sections yet so just return null here.
             return null;
         }
     }
