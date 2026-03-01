@@ -152,7 +152,6 @@ pub const File = struct {
 const Section = struct {
     file: *File,
     header: SectionHeader,
-    cache: []const u8,
     record_region: []const u8,
     string_region: ?[]const u8,
     copy_table: std.hash_map.AutoHashMap(u32, u32),
@@ -175,31 +174,31 @@ const Section = struct {
         } else {
             record_section_size = header.offset_records_end - header.file_offset;
         }
-        const cache_size = record_section_size + header.id_list_size + header.copy_table_count * @sizeOf(CopyTableEntry) + header.offset_map_id_count * @sizeOf(OffsetMapEntry) + header.relationship_data_size + header.offset_map_id_count * 4;
-        var cache = try allocator.alignedAlloc(u8, std.mem.Alignment.@"4", cache_size);
-        errdefer allocator.free(cache);
+        var record_region = try allocator.alloc(u8, record_section_size);
+        errdefer allocator.free(record_region);
+
+        const end_section_size = header.id_list_size + header.copy_table_count * @sizeOf(CopyTableEntry) + header.offset_map_id_count * @sizeOf(OffsetMapEntry) + header.relationship_data_size + header.offset_map_id_count * 4;
+        var end_section = try allocator.alignedAlloc(u8, std.mem.Alignment.@"4", end_section_size);
+        defer allocator.free(end_section);
 
         // read the entire section from the file into the cache
         try file.file.seekTo(header.file_offset);
-        _ = try file.file.read(cache);
+        _ = try file.file.read(record_region);
+        _ = try file.file.read(end_section);
 
         // setup the record and string region slices
-        var record_region: []const u8 = undefined;
         var string_region: ?[]const u8 = null;
         if (!file.has_variable_records()) {
             const record_region_size = file.header.record_size * header.record_count;
-            record_region = cache[0..record_region_size];
-            string_region = cache[record_region_size .. record_region_size + header.string_table_size];
-        } else {
-            record_region = cache[0 .. header.offset_records_end - header.file_offset];
+            string_region = record_region[record_region_size .. record_region_size + header.string_table_size];
         }
 
         // load the copy table
         var copy_table = std.AutoHashMap(u32, u32).init(allocator);
         errdefer copy_table.deinit();
         try copy_table.ensureTotalCapacity(header.copy_table_count);
-        const copy_table_offset = record_section_size + header.id_list_size;
-        const copy_table_entries: []const CopyTableEntry = @ptrCast(@alignCast(cache[copy_table_offset .. copy_table_offset + header.copy_table_count * @sizeOf(CopyTableEntry)]));
+        const copy_table_offset = header.id_list_size;
+        const copy_table_entries: []const CopyTableEntry = @ptrCast(@alignCast(end_section[copy_table_offset .. copy_table_offset + header.copy_table_count * @sizeOf(CopyTableEntry)]));
         for (copy_table_entries) |entry| {
             try copy_table.put(entry.id_of_new_row, entry.id_of_copied_row);
         }
@@ -208,13 +207,13 @@ const Section = struct {
         var foreign_key_map = std.AutoHashMap(u32, u32).init(allocator);
         errdefer foreign_key_map.deinit();
         if (header.relationship_data_size > 0) {
-            var rel_offset = record_section_size + header.id_list_size + header.copy_table_count * @sizeOf(CopyTableEntry) + header.offset_map_id_count * @sizeOf(OffsetMapEntry);
+            var rel_offset = header.id_list_size + header.copy_table_count * @sizeOf(CopyTableEntry) + header.offset_map_id_count * @sizeOf(OffsetMapEntry);
             if (file.has_relationship_data()) {
                 rel_offset += header.offset_map_id_count * 4;
             }
-            const rel_mapping = std.mem.bytesAsValue(RelationshipMapping, cache[rel_offset .. rel_offset + @sizeOf(RelationshipMapping)]);
+            const rel_mapping = std.mem.bytesAsValue(RelationshipMapping, end_section[rel_offset .. rel_offset + @sizeOf(RelationshipMapping)]);
             rel_offset += @sizeOf(RelationshipMapping);
-            const rel_entries: []const RelationshipEntry = @ptrCast(@alignCast(cache[rel_offset .. rel_offset + @sizeOf(RelationshipEntry) * rel_mapping.num_entries]));
+            const rel_entries: []const RelationshipEntry = @ptrCast(@alignCast(end_section[rel_offset .. rel_offset + @sizeOf(RelationshipEntry) * rel_mapping.num_entries]));
             try foreign_key_map.ensureTotalCapacity(rel_mapping.num_entries);
             for (rel_entries) |entry| {
                 try foreign_key_map.put(entry.foreign_id, entry.record_index);
@@ -222,13 +221,12 @@ const Section = struct {
         }
 
         // get a slice to the id list
-        const id_list = try allocator.alloc(u32, header.id_list_size / 4);
-        @memcpy(@as([]u8, @ptrCast(id_list)), cache[record_section_size .. record_section_size + header.id_list_size]);
+        const cache_id_list: []const u32 = @ptrCast(@alignCast(end_section[0..header.id_list_size]));
+        const id_list = try allocator.dupe(u32, cache_id_list);
 
         return .{
             .file = file,
             .header = header,
-            .cache = cache,
             .record_region = record_region,
             .string_region = string_region,
             .copy_table = copy_table,
@@ -304,15 +302,15 @@ const SectionRecordIter = struct {
 
     pub fn next(self: *@This()) ?FixedRecord {
         const record_size = self.section.file.header.record_size;
-        if ((self.index + record_size) <= self.section.record_region.len) {
-            const index = self.index;
-            self.index += record_size;
+        if (self.index < self.section.header.record_count) {
             var id: ?u32 = null;
             if (self.section.file.has_noninline_ids()) {
-                id = self.section.id_list[index / record_size];
+                id = self.section.id_list[self.index];
             }
-            const field_data = self.section.record_region[index .. index + record_size];
-            return .{ .id = id, .fields = self.section.file.field_storage_infos(), .data = BitBuffer.from_buffer(field_data), .section = self.section, .index = index };
+            const region_index = self.index * record_size;
+            const field_data = self.section.record_region[region_index .. region_index + record_size];
+            self.index += 1;
+            return .{ .id = id, .fields = self.section.file.field_storage_infos(), .data = BitBuffer.from_buffer(field_data), .section = self.section, .index = region_index };
         } else {
             return null;
         }
@@ -429,7 +427,7 @@ pub const FixedRecord = struct {
                 return .{ .indexed = self.section.file.pallet_data[pallet_index .. pallet_index + field.storage_data.bitpacked_indexed.array_count] };
             },
             .field_compression_common_data => {
-                return .{ .unsigned = self.section.file.common_data.get(self.id.?) orelse field.storage_data.common_data.default };
+                return .{ .unsigned = self.section.file.common_data.get(self.get_id()) orelse field.storage_data.common_data.default };
             },
         }
     }

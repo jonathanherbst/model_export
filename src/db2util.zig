@@ -62,7 +62,7 @@ fn print_db2_info(wdc5_file: wdc5.File, maybe_dbd_def: ?dbd.DBD, writer: *Stdout
 
     writer.print("sections:\n", .{});
     for (wdc5_file.section_headers()) |sec| {
-        writer.print("\thash: 0x{x}, records: {}, noninline ids: {}, rel data: {} bytes, copy entries: {}\n", .{ sec.tact_key_hash, sec.record_count, sec.id_list_size / 4, sec.relationship_data_size, sec.copy_table_count });
+        writer.print("\thash: 0x{X}, records: {}, noninline ids: {}, rel data: {} bytes, copy entries: {}\n", .{ sec.tact_key_hash, sec.record_count, sec.id_list_size / 4, sec.relationship_data_size, sec.copy_table_count });
     }
 }
 

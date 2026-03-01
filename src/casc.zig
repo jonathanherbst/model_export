@@ -69,7 +69,7 @@ pub const Casc = struct {
 
     pub fn open_file(self: Casc, data: *const FileData) !File {
         var file_handle: casclib.HANDLE = null;
-        if (casclib.CascOpenFile(self.handle, &data.ckey, casclib.CASC_LOCALE_NONE, casclib.CASC_OPEN_BY_CKEY, &file_handle) and
+        if (casclib.CascOpenFile(self.handle, &data.ckey, casclib.CASC_LOCALE_NONE, casclib.CASC_OPEN_BY_CKEY | casclib.CASC_OVERCOME_ENCRYPTED, &file_handle) and
             file_handle != casclib.INVALID_HANDLE_VALUE)
         {
             return File{ .handle = file_handle };
@@ -197,6 +197,10 @@ const FileData = extern struct {
     span_count: c_uint,
     file_available: c_uint,
     name_type: NameType,
+
+    pub fn get_name(self: FileData) [*:0]const u8 {
+        return @ptrCast(&self.name);
+    }
 };
 
 const NameType = enum(c_int) {
