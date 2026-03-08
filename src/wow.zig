@@ -1,17 +1,20 @@
 const std = @import("std");
 
 const casc = @import("casc.zig");
+const dbd = @import("dbd.zig");
 const github = @import("github.zig");
+const wdc5 = @import("wdc5.zig");
 
 const log = std.log.scoped(.wow);
 
 const Error = error{
     UnableToGetListfile,
     UnableToGetDBDData,
+    UnknownTable,
 };
 
 pub fn get_best_listfile(cache_dir: []const u8, allocator: std.mem.Allocator) ?[]const u8 {
-    const path = std.fs.path.join(allocator, &[_][]const u8{ cache_dir, "verified-listfile.csv" }) catch |err| {
+    const path = std.fs.path.join(allocator, &[_][]const u8{ cache_dir, "verified-listfile-withcapitals.csv" }) catch |err| {
         std.debug.panic("couldn't allocate join {}", .{err});
     };
 
@@ -117,12 +120,62 @@ pub const CascDatabase = struct {
         return .{ .casc = casc_obj, .arena = arena, .dbd_dir = dbd_dir, .tables = tables };
     }
 
-    pub fn all_tables(self: @This()) TableMap.KeyIterator {
+    pub fn close(self: @This()) void {
+        self.casc.close();
+        self.arena.deinit();
+    }
+
+    pub fn table_names(self: @This()) TableMap.KeyIterator {
         return self.tables.keyIterator();
     }
 
-    pub fn close(self: @This()) void {
-        self.casc.close();
+    pub fn open_table(self: *@This(), name: []const u8) !Table {
+        var arena: std.heap.ArenaAllocator = .init(self.arena.allocator());
+        errdefer arena.deinit();
+        var allocator = arena.allocator();
+
+        if (self.tables.get(name)) |db2_name| {
+            var casc_file = try allocator.create(casc.File);
+            casc_file.* = try self.casc.open_file_by_name(db2_name, .{});
+            errdefer casc_file.close();
+
+            const reader = wdc5.FileReader.from_casc_file(casc_file);
+            var wdc5_file = try wdc5.File.open(reader, allocator);
+            errdefer wdc5_file.close();
+
+            const layout_hash_str = try std.fmt.allocPrint(allocator, "{X:08}", .{wdc5_file.get_layout_hash()});
+            defer allocator.free(layout_hash_str);
+
+            const dbd_file_name = try std.fmt.allocPrint(allocator, "{s}.dbd", .{name});
+            defer allocator.free(dbd_file_name);
+            const dbd_path = try std.fs.path.join(allocator, &.{ self.dbd_dir, dbd_file_name });
+            defer allocator.free(dbd_path);
+            const dbd_def = try dbd.DBD.from_reader(dbd_path, .{ .layout = layout_hash_str }, allocator);
+
+            return .{
+                .arena = arena,
+                .db2 = wdc5_file,
+                .def = dbd_def,
+                .casc_file = casc_file,
+            };
+        }
+        return Error.UnknownTable;
+    }
+
+    pub fn open_file(self: @This(), file_data_id: u32) !casc.File {
+        return try self.casc.open_file_by_id(file_data_id, .{});
+    }
+};
+
+const Table = struct {
+    arena: std.heap.ArenaAllocator,
+    db2: wdc5.File,
+    def: dbd.DBD,
+    casc_file: *casc.File,
+
+    pub fn close(self: *@This()) void {
+        self.db2.close();
+        self.casc_file.close();
         self.arena.deinit();
     }
 };

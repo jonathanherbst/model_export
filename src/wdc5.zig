@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const casc = @import("casc.zig");
+
 pub const Error = error{
     InvalidFileHeader,
     NotEnoughData,
@@ -490,6 +492,26 @@ pub const FileReader = struct {
             fn read(ptr: *anyopaque, buffer: []u8) anyerror!usize {
                 const self: *std.fs.File = @ptrCast(@alignCast(ptr));
                 return try self.readAll(buffer);
+            }
+        };
+
+        return .{
+            .ptr = file,
+            .seekToFn = Wrapper.seekTo,
+            .readFn = Wrapper.read,
+        };
+    }
+
+    pub fn from_casc_file(file: *casc.File) @This() {
+        const Wrapper = struct {
+            fn seekTo(ptr: *anyopaque, offset: u64) anyerror!void {
+                const self: *casc.File = @ptrCast(@alignCast(ptr));
+                _ = try self.seek(@intCast(offset));
+            }
+
+            fn read(ptr: *anyopaque, buffer: []u8) anyerror!usize {
+                const self: *casc.File = @ptrCast(@alignCast(ptr));
+                return try self.read(buffer);
             }
         };
 

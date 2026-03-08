@@ -4,8 +4,8 @@ const casc = @import("casc.zig");
 const wow = @import("wow.zig");
 
 const CascDatabase = union(enum) {
-    unknown: casc.Casc,
-    wow: wow.CascDatabase,
+    unknown: *casc.Casc,
+    wow: *wow.CascDatabase,
 };
 
 pub fn main() !void {
@@ -45,11 +45,12 @@ pub fn main() !void {
     var database: CascDatabase = undefined;
     if (wow.CascDatabase.is_wow_casc(casc_obj)) {
         try stdout.print("WoW casc identified trying to open as a wow casc\n\n", .{});
-        const wow_casc = try wow.CascDatabase.open_casc(&casc_obj, .{ .allocator = allocator });
+        const wow_casc = try allocator.create(wow.CascDatabase);
+        wow_casc.* = try wow.CascDatabase.open_casc(&casc_obj, .{ .allocator = allocator });
         database = .{ .wow = wow_casc };
     } else {
         try stdout.print("Unknown product code, some features unavailable\n\n", .{});
-        database = .{ .unknown = casc_obj };
+        database = .{ .unknown = &casc_obj };
     }
 
     try stdout.print("Type 'help' for available commands or 'exit' to quit\n\n", .{});
@@ -77,7 +78,7 @@ pub fn main() !void {
 fn list_command(db: CascDatabase, path_specifier: [*:0]const u8, writer: *std.Io.Writer) !void {
     const casc_obj = switch (db) {
         .unknown => |casc_obj| casc_obj,
-        .wow => |wow_obj| wow_obj.casc.*,
+        .wow => |wow_obj| wow_obj.casc,
     };
     var files = try casc_obj.files(path_specifier);
     defer files.close();
@@ -89,13 +90,13 @@ fn list_command(db: CascDatabase, path_specifier: [*:0]const u8, writer: *std.Io
 fn extract_command(db: CascDatabase, path_specifier: [*:0]const u8, writer: *std.Io.Writer) !void {
     const casc_obj = switch (db) {
         .unknown => |casc_obj| casc_obj,
-        .wow => |wow_obj| wow_obj.casc.*,
+        .wow => |wow_obj| wow_obj.casc,
     };
     var files = try casc_obj.files(path_specifier);
     defer files.close();
     while (try files.next()) |file_data| {
         const file_path: [*:0]const u8 = @ptrCast(&file_data.name);
-        var file = try casc_obj.open_file(&file_data);
+        var file = try casc_obj.open_file(&file_data, .{});
 
         const file_name = std.fs.path.basenameWindows(std.mem.span(file_path));
 
@@ -121,7 +122,7 @@ fn tables_command(database: CascDatabase, writer: *std.Io.Writer, filter: ?[]con
     var first = true;
     switch (database) {
         .wow => |wow_db| {
-            var table_iter = wow_db.all_tables();
+            var table_iter = wow_db.table_names();
             while (table_iter.next()) |name| {
                 if (filter == null or std.mem.containsAtLeast(u8, name.*, 1, filter.?)) {
                     if (first) {
@@ -135,6 +136,34 @@ fn tables_command(database: CascDatabase, writer: *std.Io.Writer, filter: ?[]con
             try writer.print("\n", .{});
         },
         .unknown => {
+            try writer.print("unknown casc product\n", .{});
+        },
+    }
+}
+
+fn table_info_command(database: CascDatabase, writer: *std.Io.Writer, table_name: []const u8) !void {
+    switch (database) {
+        .wow => |wow_db| {
+            var table = try wow_db.open_table(table_name);
+            defer table.close();
+            for (table.def.columns.items) |column| {
+                try writer.print("{s}: {}", .{ column.name, column.field_type });
+                if (column.array) |array_len| {
+                    try writer.print("[{}]", .{array_len});
+                }
+                if (column.annotations.id) {
+                    try writer.print("|id", .{});
+                }
+                if (column.annotations.noninline) {
+                    try writer.print("|noninline", .{});
+                }
+                if (column.annotations.relation) {
+                    try writer.print("|relation", .{});
+                }
+                try writer.print("\n", .{});
+            }
+        },
+        else => {
             try writer.print("unknown casc product\n", .{});
         },
     }
@@ -155,6 +184,7 @@ fn handleCommand(db: CascDatabase, allocator: std.mem.Allocator, input: []const 
         try writer.print("  ls <path_specifier> - List files that match the path specifier\n", .{});
         try writer.print("  x <path>            - Extract a file to the cwd\n", .{});
         try writer.print("  tables [<filter>]   - List all the database tables in the casc file with an optional string to filter only the tables that contain the filter string\n", .{});
+        try writer.print("  table_info <name>   - Get information about the table records\n", .{});
     } else if (std.mem.eql(u8, command, "ls")) {
         if (iter.next()) |path_specifier| {
             const path = try allocator.dupeZ(u8, path_specifier);
@@ -174,6 +204,9 @@ fn handleCommand(db: CascDatabase, allocator: std.mem.Allocator, input: []const 
         } else {
             try tables_command(db, writer, filter);
         }
+    } else if (std.mem.eql(u8, command, "table_info")) {
+        const name = std.mem.trim(u8, iter.rest(), " \t\r\n");
+        try table_info_command(db, writer, name);
     } else {
         try writer.print("Unknown command: '{s}'\n", .{command});
     }

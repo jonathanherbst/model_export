@@ -77,22 +77,24 @@ pub const Casc = struct {
         return .{ .handle = null, .data = null };
     }
 
-    pub fn open_file(self: Casc, data: *const FileData) !File {
-        var file_handle: casclib.HANDLE = null;
-        if (casclib.CascOpenFile(self.handle, &data.ckey, casclib.CASC_LOCALE_NONE, casclib.CASC_OPEN_BY_CKEY | casclib.CASC_OVERCOME_ENCRYPTED, &file_handle) and
-            file_handle != casclib.INVALID_HANDLE_VALUE)
-        {
-            return File{ .handle = file_handle };
-        } else {
-            _ = try get_error();
-            return Error.FileNotFound;
-        }
+    pub fn open_file(self: Casc, data: *const FileData, options: OpenFileOptions) !File {
+        return try self.open_file_by_name(data.get_name(), options);
     }
 
-    pub fn open_file_by_id(self: Casc, id: u32) !File {
-        var file_handle: casclib.HANDLE = null;
+    pub fn open_file_by_name(self: Casc, name: [*:0]const u8, options: OpenFileOptions) !File {
+        const flags = casclib.CASC_OPEN_BY_NAME | options.get_open_flags();
+        return try self.open_file_from_flags(name, flags);
+    }
+
+    pub fn open_file_by_id(self: Casc, id: u32, options: OpenFileOptions) !File {
+        const flags = casclib.CASC_OPEN_BY_FILEID | options.get_open_flags();
         const casc_file_id = casclib.CASC_FILE_DATA_ID(id);
-        if (casclib.CascOpenFile(self.handle, casc_file_id, casclib.CASC_LOCALE_NONE, casclib.CASC_OPEN_BY_FILEID | casclib.CASC_OVERCOME_ENCRYPTED, &file_handle) and
+        return try self.open_file_from_flags(casc_file_id, flags);
+    }
+
+    fn open_file_from_flags(self: Casc, identifier: *const anyopaque, flags: c_int) !File {
+        var file_handle: casclib.HANDLE = null;
+        if (casclib.CascOpenFile(self.handle, identifier, casclib.CASC_LOCALE_NONE, @bitCast(flags), &file_handle) and
             file_handle != casclib.INVALID_HANDLE_VALUE)
         {
             return File{ .handle = file_handle };
@@ -160,6 +162,18 @@ pub const FileSequence = struct {
 
     pub fn close(self: FileSequence) void {
         _ = casclib.CascFindClose(self.handle);
+    }
+};
+
+const OpenFileOptions = struct {
+    zero_encrypted: bool = true,
+
+    pub fn get_open_flags(self: @This()) c_int {
+        var flags: c_int = 0;
+        if (self.zero_encrypted) {
+            flags |= casclib.CASC_OVERCOME_ENCRYPTED;
+        }
+        return flags;
     }
 };
 
