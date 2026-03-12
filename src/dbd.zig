@@ -167,6 +167,15 @@ pub const DBD = struct {
         return self.columns.items.len - 1;
     }
 
+    pub fn get_index_by_name(self: @This(), name: []const u8) !usize {
+        for (self.columns.items, 0..) |column, index| {
+            if (std.mem.eql(u8, name, column.name)) {
+                return index;
+            }
+        }
+        return Error.UnknownColumn;
+    }
+
     pub fn get_column(self: @This(), index: usize) Column {
         if (index < self.id_index) {
             return self.columns.items[index];

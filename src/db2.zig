@@ -267,7 +267,7 @@ const Section = struct {
     }
 };
 
-const FileRecordIter = struct {
+pub const FileRecordIter = struct {
     sections: SectionIter,
     section_records: ?SectionRecordIter,
 

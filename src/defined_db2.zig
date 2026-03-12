@@ -1,11 +1,11 @@
 const std = @import("std");
 
 const dbd = @import("dbd.zig");
-const wdc5 = @import("wdc5.zig");
+const db2 = @import("db2.zig");
 
 pub const DefinedRecord = struct {
     schema: dbd.DBD,
-    record: wdc5.FixedRecord,
+    record: db2.FixedRecord,
 
     pub fn num_fields(self: @This()) usize {
         std.debug.assert(self.record.num_fields() == self.schema.num_columns());
@@ -29,11 +29,11 @@ const Value = union(enum) {
     string: []const u8,
 };
 
-const DefinedField = struct {
+pub const DefinedField = struct {
     index: usize,
     column: dbd.Column,
-    field: wdc5.Field,
-    record: wdc5.FixedRecord,
+    field: db2.Field,
+    record: db2.FixedRecord,
 
     pub fn num_values(self: @This()) usize {
         return self.column.array orelse 1;
@@ -78,5 +78,47 @@ const DefinedField = struct {
                 }
             },
         }
+    }
+
+    pub fn print(self: @This(), writer: *std.Io.Writer) !void {
+        if (self.num_values() == 1) {
+            switch (self.get_value(0)) {
+                .float => |v| try writer.print(" {}", .{v}),
+                .signed => |v| try writer.print(" {}", .{v}),
+                .unsigned => |v| try writer.print(" {}", .{v}),
+                .string => |v| try writer.print(" \"{s}\"", .{v}),
+            }
+        } else {
+            switch (self.get_value(0)) {
+                .float => |v| try writer.print(" [{}", .{v}),
+                .signed => |v| try writer.print(" [{}", .{v}),
+                .unsigned => |v| try writer.print(" [{}", .{v}),
+                .string => |v| try writer.print(" [\"{s}\"", .{v}),
+            }
+            for (1..self.num_values()) |field_idx| {
+                switch (self.get_value(field_idx)) {
+                    .float => |v| try writer.print(", {}", .{v}),
+                    .signed => |v| try writer.print(", {}", .{v}),
+                    .unsigned => |v| try writer.print(", {}", .{v}),
+                    .string => |v| try writer.print(", \"{s}\"", .{v}),
+                }
+            }
+            try writer.print("]", .{});
+        }
+    }
+};
+
+pub const FieldIterator = struct {
+    schema: dbd.DBD,
+    iter: db2.FileRecordIter,
+
+    pub fn next(self: *@This()) ?DefinedRecord {
+        if (self.iter.next()) |record| {
+            return .{
+                .schema = self.schema,
+                .record = record,
+            };
+        }
+        return null;
     }
 };

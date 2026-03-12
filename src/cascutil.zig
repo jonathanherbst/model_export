@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const casc = @import("casc.zig");
+const query = @import("query.zig");
 const wow = @import("wow.zig");
 
 const CascDatabase = union(enum) {
@@ -169,7 +170,37 @@ fn table_info_command(database: CascDatabase, writer: *std.Io.Writer, table_name
     }
 }
 
-//fn select_command(casc_obj: casc.Casc, args: []const u8, writer: *std.Io.Writer) !void {}
+fn select_command(database: CascDatabase, writer: *std.Io.Writer, query_str: []const u8) !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    switch (database) {
+        .wow => |wow_db| {
+            const q = query.parse(query_str, allocator) catch |err| {
+                try writer.print("Parse error: {}\n", .{err});
+                return;
+            };
+            var result = wow_db.select(q) catch |err| {
+                try writer.print("Query error: {}\n", .{err});
+                return;
+            };
+            defer result.deinit();
+
+            while (result.next()) |record| {
+                for (0..record.num_fields()) |idx| {
+                    if (idx > 0) {
+                        try writer.print("|", .{});
+                    }
+                    try record.get_field(idx).print(writer);
+                }
+                try writer.print("\n", .{});
+            }
+        },
+        .unknown => {
+            try writer.print("SELECT not supported for unknown product\n", .{});
+        },
+    }
+}
 
 fn handleCommand(db: CascDatabase, allocator: std.mem.Allocator, input: []const u8, writer: *std.Io.Writer) !void {
     var iter = std.mem.splitSequence(u8, input, " ");
@@ -185,6 +216,7 @@ fn handleCommand(db: CascDatabase, allocator: std.mem.Allocator, input: []const 
         try writer.print("  x <path>            - Extract a file to the cwd\n", .{});
         try writer.print("  tables [<filter>]   - List all the database tables in the casc file with an optional string to filter only the tables that contain the filter string\n", .{});
         try writer.print("  table_info <name>   - Get information about the table records\n", .{});
+        try writer.print("  SELECT ...          - Execute a SELECT query (e.g., SELECT * FROM ChrRaces or SELECT ID, Name FROM ChrRaces)\n", .{});
     } else if (std.mem.eql(u8, command, "ls")) {
         if (iter.next()) |path_specifier| {
             const path = try allocator.dupeZ(u8, path_specifier);
@@ -207,6 +239,8 @@ fn handleCommand(db: CascDatabase, allocator: std.mem.Allocator, input: []const 
     } else if (std.mem.eql(u8, command, "table_info")) {
         const name = std.mem.trim(u8, iter.rest(), " \t\r\n");
         try table_info_command(db, writer, name);
+    } else if (std.mem.eql(u8, try std.ascii.allocLowerString(allocator, command), "select")) {
+        try select_command(db, writer, input);
     } else {
         try writer.print("Unknown command: '{s}'\n", .{command});
     }

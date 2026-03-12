@@ -2,8 +2,10 @@ const std = @import("std");
 
 const casc = @import("casc.zig");
 const dbd = @import("dbd.zig");
+const db2 = @import("db2.zig");
+const def_db2 = @import("defined_db2.zig");
 const github = @import("github.zig");
-const wdc5 = @import("wdc5.zig");
+const query = @import("query.zig");
 
 const log = std.log.scoped(.wow);
 
@@ -139,8 +141,8 @@ pub const CascDatabase = struct {
             casc_file.* = try self.casc.open_file_by_name(db2_name, .{});
             errdefer casc_file.close();
 
-            const reader = wdc5.FileReader.from_casc_file(casc_file);
-            var wdc5_file = try wdc5.File.open(reader, allocator);
+            const reader = db2.FileReader.from_casc_file(casc_file);
+            var wdc5_file = try db2.File.open(reader, allocator);
             errdefer wdc5_file.close();
 
             const layout_hash_str = try std.fmt.allocPrint(allocator, "{X:08}", .{wdc5_file.get_layout_hash()});
@@ -165,11 +167,31 @@ pub const CascDatabase = struct {
     pub fn open_file(self: @This(), file_data_id: u32) !casc.File {
         return try self.casc.open_file_by_id(file_data_id, .{});
     }
+
+    pub fn select(self: *@This(), q: query.Select) !FilteredFieldIterator {
+        const allocator = self.arena.allocator();
+        var col_idx: std.array_list.Managed(usize) = .init(allocator);
+        errdefer col_idx.deinit();
+        const table = try allocator.create(Table);
+        errdefer allocator.destroy(table);
+        table.* = try self.open_table(q.from.table);
+        errdefer table.close();
+        for (q.columns) |column| {
+            try col_idx.append(try table.def.get_index_by_name(column.name));
+        }
+
+        return .{
+            .allocator = allocator,
+            .iter = try table.records(),
+            .columns = col_idx,
+            .table = table,
+        };
+    }
 };
 
 const Table = struct {
     arena: std.heap.ArenaAllocator,
-    db2: wdc5.File,
+    db2: db2.File,
     def: dbd.DBD,
     casc_file: *casc.File,
 
@@ -177,6 +199,58 @@ const Table = struct {
         self.db2.close();
         self.casc_file.close();
         self.arena.deinit();
+    }
+
+    pub fn records(self: *@This()) !def_db2.FieldIterator {
+        return .{ .schema = self.def, .iter = try self.db2.records() };
+    }
+};
+
+const FilteredFieldIterator = struct {
+    allocator: std.mem.Allocator,
+    iter: def_db2.FieldIterator,
+    columns: std.array_list.Managed(usize),
+    table: *Table,
+
+    pub fn num_fields(self: @This()) usize {
+        return self.columns.items.len;
+    }
+
+    pub fn next(self: *@This()) ?FilteredRecord {
+        if (self.iter.next()) |record| {
+            return .{
+                .record = record,
+                .columns = self.columns,
+            };
+        }
+        return null;
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.columns.deinit();
+        self.table.close();
+        self.allocator.destroy(self.table);
+    }
+};
+
+const FilteredRecord = struct {
+    record: def_db2.DefinedRecord,
+    columns: std.array_list.Managed(usize),
+
+    pub fn num_fields(self: @This()) usize {
+        if (self.columns.items.len > 0) {
+            return self.columns.items.len;
+        } else {
+            return self.record.num_fields();
+        }
+    }
+
+    pub fn get_field(self: @This(), idx: usize) def_db2.DefinedField {
+        if (self.columns.items.len > 0) {
+            return self.record.get_field(self.columns.items[idx]);
+        } else {
+            return self.record.get_field(idx);
+        }
     }
 };
 
