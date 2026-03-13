@@ -48,7 +48,7 @@ func (casc Casc) SearchFiles(mask string, yield func(FileData) bool) {
 	casclib_sys.FindClose(iter)
 }
 
-func (casc Casc) OpenFileByName(name string, zeroEncrypted bool) (*File, error) {
+func (casc Casc) OpenFileByName(name string, zeroEncrypted bool) (*CascFile, error) {
 	var flags uint32 = 0
 	if zeroEncrypted {
 		flags |= casclib_sys.OF_OVERCOME_ENCRYPTED
@@ -57,10 +57,10 @@ func (casc Casc) OpenFileByName(name string, zeroEncrypted bool) (*File, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed opening file: %w", err)
 	}
-	return &File{handle, name}, nil
+	return &CascFile{handle, name}, nil
 }
 
-func (casc Casc) OpenFileById(id uint32, zeroEncrypted bool) (*File, error) {
+func (casc Casc) OpenFileById(id uint32, zeroEncrypted bool) (*CascFile, error) {
 	var flags uint32 = 0
 	if zeroEncrypted {
 		flags |= casclib_sys.OF_OVERCOME_ENCRYPTED
@@ -73,7 +73,7 @@ func (casc Casc) OpenFileById(id uint32, zeroEncrypted bool) (*File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed getting file info: %w", err)
 	}
-	return &File{handle, data.Name()}, nil
+	return &CascFile{handle, data.Name()}, nil
 }
 
 type FileData struct {
@@ -81,16 +81,16 @@ type FileData struct {
 	parent Casc
 }
 
-func (data FileData) Open(zeroEncrypted bool) (*File, error) {
+func (data FileData) Open(zeroEncrypted bool) (*CascFile, error) {
 	return data.parent.OpenFileByName(data.Name, zeroEncrypted)
 }
 
-type File struct {
+type CascFile struct {
 	handle casclib_sys.File
 	name   string
 }
 
-func (file File) Close() error {
+func (file CascFile) Close() error {
 	err := casclib_sys.CloseFile(file.handle)
 	if err != nil {
 		return fmt.Errorf("failed to close a file: %w", err)
@@ -98,7 +98,7 @@ func (file File) Close() error {
 	return nil
 }
 
-func (file File) Read(buffer []byte) (uint, error) {
+func (file CascFile) Read(buffer []byte) (uint, error) {
 	len, err := casclib_sys.ReadFile(file.handle, buffer)
 	if err != nil {
 		return 0, fmt.Errorf("faile reading a file: %w", err)
@@ -106,7 +106,7 @@ func (file File) Read(buffer []byte) (uint, error) {
 	return len, nil
 }
 
-func (file File) Seek(offset int64, whence int) (int64, error) {
+func (file CascFile) Seek(offset int64, whence int) (int64, error) {
 	new_offset, err := casclib_sys.SetFilePointer64(file.handle, offset)
 	if err != nil {
 		return 0, fmt.Errorf("failed seeking a file: %w", err)

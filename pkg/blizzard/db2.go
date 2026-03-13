@@ -1,15 +1,15 @@
 package blizzard
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
-	"unsafe"
 )
 
 // WDC5 DB2 Header
-type Header struct {
+type WDC5Header struct {
 	Magic                [4]byte   // 'WDC5'
 	Version              uint32    // 5, probably numeric version?
 	SchemaString         [128]byte // "WowStatic_Patch_10_2_5" + padding in 10.2.5.52432
@@ -34,7 +34,7 @@ type Header struct {
 }
 
 // WDC5 Section Header
-type SectionHeader struct {
+type WDC5SectionHeader struct {
 	TactKeyHash          uint64 // TactKeyLookup hash
 	FileOffset           uint32 // absolute position to the beginning of the section
 	RecordCount          uint32 // 'record_count' for the section
@@ -47,78 +47,103 @@ type SectionHeader struct {
 }
 
 // Field structure for WDC5
-type FieldStructure struct {
+type WDC5FieldStructure struct {
 	Size     int16  // size in bits as calculated by: byteSize = (32 - size) / 8; this value can be negative to indicate field sizes larger than 32-bits
 	Position uint16 // position of the field within the record, relative to the start of the record
 }
 
 // Field compression types for WDC5
-type FieldCompression int32
+type WDC5FieldCompression int32
 
 const (
-	FieldCompressionNone                  FieldCompression = 0 // None -- usually the field is a 8-, 16-, 32-, or 64-bit integer in the record data. But can contain 96-bit value representing 3 floats as well
-	FieldCompressionBitpacked             FieldCompression = 1 // Bitpacked -- the field is a bitpacked integer in the record data.
-	FieldCompressionCommonData            FieldCompression = 2 // Common data -- the field is assumed to be a default value, and exceptions from that default value are stored in the corresponding section in common_data
-	FieldCompressionBitpackedIndexed      FieldCompression = 3 // Bitpacked indexed -- the field has a bitpacked index in the record data.
-	FieldCompressionBitpackedIndexedArray FieldCompression = 4 // Bitpacked indexed array -- the field has a bitpacked index in the record data.
-	FieldCompressionBitpackedSigned       FieldCompression = 5 // Same as field_compression_bitpacked
+	FieldCompressionNone                  WDC5FieldCompression = 0 // None -- usually the field is a 8-, 16-, 32-, or 64-bit integer in the record data. But can contain 96-bit value representing 3 floats as well
+	FieldCompressionBitpacked             WDC5FieldCompression = 1 // Bitpacked -- the field is a bitpacked integer in the record data.
+	FieldCompressionCommonData            WDC5FieldCompression = 2 // Common data -- the field is assumed to be a default value, and exceptions from that default value are stored in the corresponding section in common_data
+	FieldCompressionBitpackedIndexed      WDC5FieldCompression = 3 // Bitpacked indexed -- the field has a bitpacked index in the record data.
+	FieldCompressionBitpackedIndexedArray WDC5FieldCompression = 4 // Bitpacked indexed array -- the field has a bitpacked index in the record data.
+	FieldCompressionBitpackedSigned       WDC5FieldCompression = 5 // Same as field_compression_bitpacked
 )
 
 // Field storage info for WDC5
-type FieldStorageInfo struct {
+type WDC5FieldStorageInfo struct {
 	FieldOffsetBits    uint16
 	FieldSizeBits      uint16 // very important for reading bitpacked fields; size is the sum of all array pieces in bits - for example, uint32[3] will appear here as '96'
 	AdditionalDataSize uint32 // the size in bytes of the corresponding section in common_data or pallet_data. These sections are in the same order as the field_info, so to find the offset, add up the additional_data_size of any previous fields which are stored in the same block
-	StorageType        FieldCompression
-	// Additional fields depend on storage_type
-	StorageData struct {
-		Bitpacked struct {
-			OffsetBits uint32
-			SizeBits   uint32
-			Flags      uint32
-		}
-		BitpackedIndexed struct {
-			OffsetBits uint32
-			SizeBits   uint32
-			ArrayCount uint32
-		}
-		CommonData struct {
-			Default uint32
-		}
-		Unknown struct {
-			D1 uint32
-			D2 uint32
-			D3 uint32
-		}
+	StorageType        WDC5FieldCompression
+	Data               [3]uint32 // Data fields depend on storage_type
+}
+
+type WDC5FieldDataBitpacked struct {
+	OffsetBits uint32 // not useful for most purposes; formula they use to calculate is bitpacking_offset_bits = field_offset_bits - (header.bitpacked_data_offset * 8)
+	SizeBits   uint32 // not useful for most purposes
+	Flags      uint32 // known values - 0x01: sign-extend (signed)
+}
+
+type WDC5FieldDataBitpackedIndex struct {
+	OffsetBits uint32 // not useful for most purposes; formula they use to calculate is bitpacking_offset_bits = field_offset_bits - (header.bitpacked_data_offset * 8)
+	SizeBits   uint32 // not useful for most purposes
+	ArrayCount uint32
+}
+
+type WDC5FieldDataCommonData struct {
+	Default uint32
+}
+
+func (info WDC5FieldStorageInfo) BitpackedParams() WDC5FieldDataBitpacked {
+	if info.StorageType != FieldCompressionBitpacked && info.StorageType != FieldCompressionBitpackedSigned {
+		panic("trying to get bitpacked data when not a bitpacked type")
+	}
+	return WDC5FieldDataBitpacked{
+		OffsetBits: info.Data[0],
+		SizeBits:   info.Data[1],
+		Flags:      info.Data[2],
 	}
 }
 
+func (info WDC5FieldStorageInfo) BitpackedIndexParams() WDC5FieldDataBitpackedIndex {
+	if info.StorageType != FieldCompressionBitpackedIndexed && info.StorageType != FieldCompressionBitpackedIndexedArray {
+		panic("trying to get bitpacked index data when not a bitpacked index type")
+	}
+	return WDC5FieldDataBitpackedIndex{
+		OffsetBits: info.Data[0],
+		SizeBits:   info.Data[1],
+		ArrayCount: info.Data[2],
+	}
+}
+
+func (info WDC5FieldStorageInfo) CommonDataParams() WDC5FieldDataCommonData {
+	if info.StorageType != FieldCompressionCommonData {
+		panic("trying to get common data when not a common data type")
+	}
+	return WDC5FieldDataCommonData{Default: info.Data[0]}
+}
+
 // Holds encryption status of specific ID in a section where tact_key_hash is not 0
-type EncryptedStatus struct {
+type WDC5EncryptedStatus struct {
 	EncryptedIDCount int32
 	// Followed by: encrypted_id[encrypted_id_count]
 }
 
 // Copy table entry for deduplication
-type CopyTableEntry struct {
+type WDC5CopyTableEntry struct {
 	IDOfNewRow    uint32
 	IDOfCopiedRow uint32
 }
 
 // Offset map entry
-type OffsetMapEntry struct {
+type WDC5OffsetMapEntry struct {
 	Offset uint32
 	Size   uint16
 }
 
 // Relationship entry
-type RelationshipEntry struct {
+type WDC5RelationshipEntry struct {
 	ForeignID   uint32 // This is the id of the foreign key for the record, e.g. SpellID in SpellX* tables.
 	RecordIndex uint32 // This is the index of the record in record_data. Note that this is *not* the record's own ID *unless* flag 0x02 is set.
 }
 
 // Relationship mapping
-type RelationshipMapping struct {
+type WDC5RelationshipMapping struct {
 	NumEntries uint32
 	MinID      uint32
 	MaxID      uint32
@@ -126,7 +151,7 @@ type RelationshipMapping struct {
 }
 
 // Common data map entry
-type CommonDataMapEntry struct {
+type WDC5CommonDataMapEntry struct {
 	ID       uint32
 	RawValue uint32
 }
@@ -139,276 +164,236 @@ const (
 	FlagIsBitpacked         uint16 = 0x10 // 'Is bitpacked'
 )
 
-// FileReader interface for reading from files or CASC
-type FileReader interface {
-	Seek(offset int64, whence int) (int64, error)
-	Read(p []byte) (n int, err error)
-	ReadAt(p []byte, off int64) (n int, err error)
-}
-
-// File represents a WDC5 DB2 file
-type File struct {
-	reader            FileReader
-	header            Header
-	sections          []Section
-	fieldStorageInfos []FieldStorageInfo
-	palletData        []uint32
-	commonData        map[uint32]uint32
-	cache             []byte
-}
-
-// Section represents a section in the DB2 file
-type Section struct {
-	file              *File
-	header            SectionHeader
-	recordRegion      []byte
-	stringRegion      []byte
-	copyTable         map[uint32]uint32
-	foreignKeyMap     map[uint32]uint32
-	idList            []uint32
-	recordSectionSize uint32
-}
-
 // Open opens a WDC5 DB2 file from a reader
-func Open(reader FileReader) (*File, error) {
-	file := &File{reader: reader}
+func OpenDB2File(reader io.ReadSeekCloser) (*DB2File, error) {
+	// start at the beginning
+	_, err := reader.Seek(0, 0)
+	if err != nil {
+		return nil, fmt.Errorf("unable to seek db2 file: %w", err)
+	}
+
+	file := &DB2File{reader: reader}
 
 	// Read header
-	if err := binary.Read(reader, binary.LittleEndian, &file.header); err != nil {
-		return nil, err
+	if err := binary.Read(reader, binary.LittleEndian, &file.Header); err != nil {
+		return nil, errors.New("invalid DB2 file")
 	}
 
 	// Verify magic
-	if string(file.header.Magic[:]) != "WDC5" {
-		return nil, errors.New("invalid WDC5 magic")
+	if string(file.Header.Magic[:]) != "WDC5" {
+		return nil, errors.New("not a WDC5 db2")
+	}
+
+	file.Sections = make([]WDC5SectionHeader, file.Header.SectionCount)
+	for i := range file.Sections {
+		if err := binary.Read(reader, binary.LittleEndian, &file.Sections[i]); err != nil {
+			return nil, errors.New("invalid WDC5 header")
+		}
+	}
+
+	file.FieldStructures = make([]WDC5FieldStructure, file.Header.TotalFieldCount)
+	for i := range file.FieldStructures {
+		if err := binary.Read(reader, binary.LittleEndian, &file.FieldStructures[i]); err != nil {
+			return nil, errors.New("invalid WDC5 header")
+		}
 	}
 
 	// Read field storage infos
-	file.fieldStorageInfos = make([]FieldStorageInfo, file.header.FieldCount)
-	for i := range file.fieldStorageInfos {
-		if err := binary.Read(reader, binary.LittleEndian, &file.fieldStorageInfos[i]); err != nil {
-			return nil, err
-		}
-		// Read additional storage data based on type
-		switch file.fieldStorageInfos[i].StorageType {
-		case FieldCompressionBitpacked:
-			binary.Read(reader, binary.LittleEndian, &file.fieldStorageInfos[i].StorageData.Bitpacked)
-		case FieldCompressionBitpackedIndexed, FieldCompressionBitpackedIndexedArray:
-			binary.Read(reader, binary.LittleEndian, &file.fieldStorageInfos[i].StorageData.BitpackedIndexed)
-		case FieldCompressionCommonData:
-			binary.Read(reader, binary.LittleEndian, &file.fieldStorageInfos[i].StorageData.CommonData)
-		default:
-			binary.Read(reader, binary.LittleEndian, &file.fieldStorageInfos[i].StorageData.Unknown)
+	file.FieldStorageInfos = make([]WDC5FieldStorageInfo, file.Header.FieldCount)
+	for i := range file.FieldStorageInfos {
+		if err := binary.Read(reader, binary.LittleEndian, &file.FieldStorageInfos[i]); err != nil {
+			return nil, errors.New("invalid WDC5 header")
 		}
 	}
 
 	// Read pallet data
-	file.palletData = make([]uint32, file.header.PalletDataSize/4)
-	if err := binary.Read(reader, binary.LittleEndian, &file.palletData); err != nil {
-		return nil, err
+	file.PalletData = make([]uint32, file.Header.PalletDataSize/4)
+	if err := binary.Read(reader, binary.LittleEndian, &file.PalletData); err != nil {
+		return nil, errors.New("invalid WDC5 header")
 	}
 
 	// Read common data
-	file.commonData = make(map[uint32]uint32)
-	commonDataBytes := make([]byte, file.header.CommonDataSize)
-	if _, err := reader.Read(commonDataBytes); err != nil {
-		return nil, err
-	}
-	// Parse common data entries
-	offset := 0
-	for offset < len(commonDataBytes) {
-		var entry CommonDataMapEntry
-		if err := binary.Read(io.NewSectionReader(reader, int64(offset), int64(len(commonDataBytes)-offset)), binary.LittleEndian, &entry); err != nil {
-			break
+	file.CommonData = make(map[uint32]uint32)
+	for _ = range file.Header.CommonDataSize / 8 {
+		var entry WDC5CommonDataMapEntry
+		if err := binary.Read(reader, binary.LittleEndian, &entry); err != nil {
+			return nil, errors.New("invalid WDC5 header")
 		}
-		file.commonData[entry.ID] = entry.RawValue
-		offset += int(unsafe.Sizeof(entry))
+		file.CommonData[entry.ID] = entry.RawValue
 	}
-
-	// Read section headers
-	sectionHeaders := make([]SectionHeader, file.header.SectionCount)
-	for i := range sectionHeaders {
-		if err := binary.Read(reader, binary.LittleEndian, &sectionHeaders[i]); err != nil {
-			return nil, err
-		}
-	}
-
-	// Initialize sections
-	file.sections = make([]Section, len(sectionHeaders))
-	for i, hdr := range sectionHeaders {
-		section, err := file.initSection(hdr)
-		if err != nil {
-			return nil, err
-		}
-		file.sections[i] = *section
-	}
-
 	return file, nil
 }
 
-// initSection initializes a section
-func (f *File) initSection(header SectionHeader) (*Section, error) {
-	section := &Section{
-		file:   f,
-		header: header,
+// File represents a WDC5 DB2 file
+type DB2File struct {
+	reader            io.ReadSeekCloser
+	Header            WDC5Header
+	Sections          []WDC5SectionHeader
+	FieldStructures   []WDC5FieldStructure
+	FieldStorageInfos []WDC5FieldStorageInfo
+	PalletData        []uint32
+	CommonData        map[uint32]uint32
+}
+
+func (file DB2File) Close() {
+	file.reader.Close()
+}
+
+func (file DB2File) GetSchema() string {
+	return stringFromNullTermBytes(file.Header.SchemaString[:])
+}
+
+func (file DB2File) GetLayoutHash() uint32 {
+	return file.Header.LayoutHash
+}
+
+func (file DB2File) HasVariableRecords() bool {
+	return ((file.Header.Flags) & FlagHasOffsetMap) != 0
+}
+
+func (file DB2File) HasRelationshipData() bool {
+	return (file.Header.Flags & FlagHasRelationshipData) != 0
+}
+
+func (file DB2File) HasNonInlineIDs() bool {
+	return (file.Header.Flags & FlagHasNonInlineIDs) != 0
+}
+
+func (file *DB2File) FixedRecords(yield func(DB2FixedRecord) bool) {
+	for section := range file.GetSections {
+		section.FixedRecords(yield)
 	}
+}
 
-	// Seek to section offset
-	if _, err := f.reader.Seek(int64(header.FileOffset), io.SeekStart); err != nil {
-		return nil, err
-	}
-
-	// Read the entire section into cache
-	sectionSize := header.OffsetRecordsEnd - header.FileOffset
-	cache := make([]byte, sectionSize)
-	if _, err := f.reader.Read(cache); err != nil {
-		return nil, err
-	}
-
-	// Parse section data
-	recordRegion := cache[:header.OffsetRecordsEnd-header.FileOffset-header.StringTableSize]
-	stringRegion := cache[len(recordRegion):]
-
-	section.recordRegion = recordRegion
-	section.stringRegion = stringRegion
-	section.recordSectionSize = uint32(len(recordRegion))
-
-	// Load copy table
-	copyTableOffset := header.IDListSize
-	copyTableEntries := make([]CopyTableEntry, header.CopyTableCount)
-	for i := range copyTableEntries {
-		offset := copyTableOffset + uint32(i)*uint32(unsafe.Sizeof(CopyTableEntry{}))
-		if err := binary.Read(io.NewSectionReader(f.reader, int64(header.FileOffset+offset), int64(len(cache)-int(offset))), binary.LittleEndian, &copyTableEntries[i]); err != nil {
-			return nil, err
+// Iterate all sections in the file
+func (file *DB2File) GetSections(yield func(DB2Section) bool) {
+	for _, header := range file.Sections {
+		if _, err := file.reader.Seek(int64(header.FileOffset), 0); err != nil {
+			continue
 		}
-	}
-	section.copyTable = make(map[uint32]uint32)
-	for _, entry := range copyTableEntries {
-		section.copyTable[entry.IDOfNewRow] = entry.IDOfCopiedRow
-	}
 
-	// Load relationship data
-	if header.RelationshipDataSize > 0 {
-		relOffset := header.IDListSize + header.CopyTableCount*uint32(unsafe.Sizeof(CopyTableEntry{})) + header.OffsetMapIDCount*uint32(unsafe.Sizeof(OffsetMapEntry{}))
-		if f.hasRelationshipData() {
-			relOffset += header.OffsetMapIDCount * 4
+		section := DB2Section{parent: file}
+
+		section.numRecords = header.RecordCount
+		recordRegionSize := (header.RecordCount * file.Header.RecordSize) + header.StringTableSize
+		if file.HasVariableRecords() {
+			recordRegionSize = header.OffsetRecordsEnd - header.FileOffset
 		}
-		var relMapping RelationshipMapping
-		if err := binary.Read(io.NewSectionReader(f.reader, int64(header.FileOffset+relOffset), int64(len(cache)-int(relOffset))), binary.LittleEndian, &relMapping); err != nil {
-			return nil, err
+		section.recordRegion = make([]byte, recordRegionSize)
+		if s, err := file.reader.Read(section.recordRegion); err != nil || s != int(recordRegionSize) {
+			continue
 		}
-		relOffset += uint32(unsafe.Sizeof(relMapping))
-		relEntries := make([]RelationshipEntry, relMapping.NumEntries)
-		for i := range relEntries {
-			offset := relOffset + uint32(i)*uint32(unsafe.Sizeof(RelationshipEntry{}))
-			if err := binary.Read(io.NewSectionReader(f.reader, int64(header.FileOffset+offset), int64(len(cache)-int(offset))), binary.LittleEndian, &relEntries[i]); err != nil {
-				return nil, err
+
+		section.idList = make([]uint32, header.IDListSize/4)
+		if err := binary.Read(file.reader, binary.LittleEndian, section.idList); err != nil {
+			continue
+		}
+
+		section.copyTable = make(map[uint32]uint32)
+		for _ = range header.CopyTableCount {
+			var entry WDC5CopyTableEntry
+			if err := binary.Read(file.reader, binary.LittleEndian, &entry); err != nil {
+				break
+			}
+			section.copyTable[entry.IDOfNewRow] = entry.IDOfCopiedRow
+		}
+
+		section.offsetEntries = make([]WDC5OffsetMapEntry, header.OffsetMapIDCount)
+		for i := range section.offsetEntries {
+			if err := binary.Read(file.reader, binary.LittleEndian, &section.offsetEntries[i]); err != nil {
+				break
 			}
 		}
+
+		if file.HasRelationshipData() {
+			section.offsetIds = make([]uint32, header.OffsetMapIDCount)
+			if err := binary.Read(file.reader, binary.LittleEndian, section.offsetIds); err != nil {
+				continue
+			}
+		}
+
 		section.foreignKeyMap = make(map[uint32]uint32)
-		for _, entry := range relEntries {
-			section.foreignKeyMap[entry.ForeignID] = entry.RecordIndex
+		if header.RelationshipDataSize > 0 {
+			var mapping WDC5RelationshipMapping
+			if err := binary.Read(file.reader, binary.LittleEndian, section.offsetIds); err != nil {
+				continue
+			}
+			section.foreignKeyMinId = mapping.MinID
+			section.foreignKeyMaxId = mapping.MaxID
+			for _ = range mapping.NumEntries {
+				var entry WDC5RelationshipEntry
+				if err := binary.Read(file.reader, binary.LittleEndian, &entry); err != nil {
+					break
+				}
+				section.foreignKeyMap[entry.ForeignID] = entry.RecordIndex
+			}
+		}
+
+		// this comes before the relationship mapping if HasRelationshipData
+		if !file.HasRelationshipData() {
+			section.offsetIds = make([]uint32, header.OffsetMapIDCount)
+			if err := binary.Read(file.reader, binary.LittleEndian, section.offsetIds); err != nil {
+				continue
+			}
+		}
+
+		if !yield(section) {
+			break
 		}
 	}
+}
 
-	// Get ID list
-	idListSize := header.IDListSize / 4
-	section.idList = make([]uint32, idListSize)
-	for i := range section.idList {
-		offset := uint32(i) * 4
-		if err := binary.Read(io.NewSectionReader(f.reader, int64(header.FileOffset+offset), int64(len(cache)-int(offset))), binary.LittleEndian, &section.idList[i]); err != nil {
-			return nil, err
+// Section represents a section in the DB2 file
+type DB2Section struct {
+	parent          *DB2File
+	recordRegion    []byte
+	idList          []uint32
+	copyTable       map[uint32]uint32
+	offsetEntries   []WDC5OffsetMapEntry
+	offsetIds       []uint32
+	foreignKeyMinId uint32
+	foreignKeyMaxId uint32
+	foreignKeyMap   map[uint32]uint32
+	numRecords      uint32
+}
+
+func (section *DB2Section) FixedRecords(yield func(DB2FixedRecord) bool) {
+	recordSize := uint(section.parent.Header.RecordSize)
+	for i := uint(0); i < uint(section.numRecords); i++ {
+		record := DB2FixedRecord{
+			section,
+			newWDC5BitBuffer(section.recordRegion[i*recordSize : (i+1)*recordSize]),
+			nil,
+			i,
+		}
+		if section.parent.HasNonInlineIDs() {
+			record.id = &section.idList[i]
+		}
+
+		if !yield(record) {
+			break
 		}
 	}
-
-	return section, nil
 }
 
-// Close closes the file
-func (f *File) Close() error {
-	// No-op for now, as we don't hold file handles
-	return nil
-}
-
-// Records returns an iterator over all records in the file
-func (f *File) Records() *FileRecordIter {
-	return &FileRecordIter{
-		file:         f,
-		sectionIndex: 0,
-		recordIndex:  0,
-	}
-}
-
-// FieldStorageInfos returns the field storage infos
-func (f *File) FieldStorageInfos() []FieldStorageInfo {
-	return f.fieldStorageInfos
-}
-
-// HasRelationshipData checks if the file has relationship data
-func (f *File) HasRelationshipData() bool {
-	return (f.header.Flags & FlagHasRelationshipData) != 0
-}
-
-// HasNonInlineIDs checks if the file has non-inline IDs
-func (f *File) HasNonInlineIDs() bool {
-	return (f.header.Flags & FlagHasNonInlineIDs) != 0
-}
-
-// FileRecordIter iterates over all records in the file
-type FileRecordIter struct {
-	file         *File
-	sectionIndex int
-	recordIndex  int
-}
-
-// Next returns the next record
-func (it *FileRecordIter) Next() *FixedRecord {
-	for it.sectionIndex < len(it.file.sections) {
-		section := &it.file.sections[it.sectionIndex]
-		if it.recordIndex < int(section.header.RecordCount) {
-			record := section.getRecord(it.recordIndex)
-			it.recordIndex++
-			return record
-		}
-		it.sectionIndex++
-		it.recordIndex = 0
-	}
-	return nil
-}
-
-// getRecord gets a record from the section
-func (s *Section) getRecord(index int) *FixedRecord {
-	recordSize := s.file.header.RecordSize
-	var id *uint32
-	if s.file.HasNonInlineIDs() {
-		id = &s.idList[index]
-	}
-	regionIndex := index * int(recordSize)
-	fieldData := s.recordRegion[regionIndex : regionIndex+int(recordSize)]
-	return &FixedRecord{
-		id:      id,
-		fields:  s.file.FieldStorageInfos(),
-		data:    NewBitBuffer(fieldData),
-		section: s,
-		index:   regionIndex,
-	}
+func (section DB2Section) getString(index uint) string {
+	return stringFromNullTermBytes(section.recordRegion[index:])
 }
 
 // FixedRecord represents a fixed record
-type FixedRecord struct {
-	id      *uint32
-	fields  []FieldStorageInfo
-	data    *BitBuffer
-	section *Section
-	index   int
+type DB2FixedRecord struct {
+	parent *DB2Section
+	data   wdc5BitBuffer
+	id     *uint32
+	index  uint
 }
 
 // GetID returns the ID of the record
-func (r *FixedRecord) GetID() uint32 {
+func (r DB2FixedRecord) GetID() uint32 {
 	if r.id != nil {
 		return *r.id
 	}
-	idField := r.GetField(int(r.section.file.header.IDIndex))
+	idField := r.getFieldWithID(uint(r.parent.parent.Header.IDIndex))
 	switch f := idField.(type) {
 	case int64:
 		return uint32(f)
@@ -420,26 +405,26 @@ func (r *FixedRecord) GetID() uint32 {
 }
 
 // NumFields returns the number of fields
-func (r *FixedRecord) NumFields() int {
+func (r DB2FixedRecord) NumFields() int {
 	if r.id == nil {
-		return len(r.fields) - 1
+		return len(r.fields()) - 1
 	}
-	return len(r.fields)
+	return len(r.fields())
 }
 
 // GetField returns the field at the given index
-func (r *FixedRecord) GetField(index int) interface{} {
+func (r DB2FixedRecord) GetField(index uint) interface{} {
 	if r.id != nil {
 		return r.getFieldWithID(index)
 	}
-	if index < int(r.section.file.header.IDIndex) {
+	if index < uint(r.parent.parent.Header.IDIndex) {
 		return r.getFieldWithID(index)
 	}
 	return r.getFieldWithID(index + 1)
 }
 
 // GetFieldAsString returns the field as a string
-func (r *FixedRecord) GetFieldAsString(index int) string {
+func (r DB2FixedRecord) GetFieldAsString(index uint) string {
 	field := r.GetField(index)
 	var stringIndex uint32
 	switch f := field.(type) {
@@ -453,8 +438,8 @@ func (r *FixedRecord) GetFieldAsString(index int) string {
 		stringIndex = uint32(f)
 	case uint64:
 		stringIndex = uint32(f)
-	case []uint32:
-		stringIndex = f[0]
+	default:
+		panic("unexpected type when trying to get a string")
 	}
 
 	if stringIndex == 0 {
@@ -462,65 +447,57 @@ func (r *FixedRecord) GetFieldAsString(index int) string {
 	}
 	// String indexes are referenced from where the field begins in the record.
 	// Calculate the index from the beginning of the record.
-	recordIndex := int(stringIndex) + r.index + int(r.fields[index].FieldOffsetBits/8)
+	recordIndex := uint(stringIndex) + r.index + uint(r.fields()[index].FieldOffsetBits/8)
 	// get_string indexes from the string block
-	return r.section.getString(recordIndex - len(r.section.recordRegion))
+	return r.parent.getString(recordIndex)
 }
 
 // getFieldWithID gets the field with the given ID
-func (r *FixedRecord) getFieldWithID(index int) interface{} {
-	field := r.fields[index]
+func (r DB2FixedRecord) getFieldWithID(index uint) interface{} {
+	field := r.fields()[index]
 	switch field.StorageType {
 	case FieldCompressionNone:
 		offset := field.FieldOffsetBits / 8
 		size := field.FieldSizeBits / 8
 		return r.data.inner[offset : offset+size]
 	case FieldCompressionBitpacked:
-		return r.data.GetUnsigned(int(field.FieldOffsetBits), int(field.FieldSizeBits))
+		params := field.BitpackedParams()
+		return r.data.GetUnsigned(uint(params.OffsetBits), uint(params.SizeBits))
 	case FieldCompressionBitpackedSigned:
-		return r.data.GetSigned(int(field.FieldOffsetBits), int(field.FieldSizeBits))
+		params := field.BitpackedParams()
+		return r.data.GetSigned(uint(params.OffsetBits), uint(params.SizeBits))
 	case FieldCompressionBitpackedIndexed:
-		palletIndex := r.data.GetUnsigned(int(field.FieldOffsetBits), int(field.FieldSizeBits))
-		return r.section.file.palletData[palletIndex]
+		params := field.BitpackedIndexParams()
+		palletIndex := r.data.GetUnsigned(uint(params.OffsetBits), uint(params.SizeBits))
+		return r.parent.parent.PalletData[palletIndex]
 	case FieldCompressionBitpackedIndexedArray:
-		palletIndex := r.data.GetUnsigned(int(field.FieldOffsetBits), int(field.FieldSizeBits))
-		arrayCount := field.StorageData.BitpackedIndexed.ArrayCount
-		return r.section.file.palletData[palletIndex : palletIndex+uint64(arrayCount)]
+		params := field.BitpackedIndexParams()
+		palletIndex := r.data.GetUnsigned(uint(params.OffsetBits), uint(params.SizeBits))
+		return r.parent.parent.PalletData[palletIndex : palletIndex+uint64(params.ArrayCount)]
 	case FieldCompressionCommonData:
-		if val, ok := r.section.file.commonData[r.GetID()]; ok {
+		if val, ok := r.parent.parent.CommonData[r.GetID()]; ok {
 			return val
 		}
-		return field.StorageData.CommonData.Default
+		return field.CommonDataParams().Default
 	}
-	return nil
+	panic("unknown field storage type")
 }
 
-// getString gets a string from the string region
-func (s *Section) getString(index int) string {
-	if index < 0 || index >= len(s.stringRegion) {
-		return ""
-	}
-	// Find null terminator
-	for i := index; i < len(s.stringRegion); i++ {
-		if s.stringRegion[i] == 0 {
-			return string(s.stringRegion[index:i])
-		}
-	}
-	return string(s.stringRegion[index:])
+func (r DB2FixedRecord) fields() []WDC5FieldStorageInfo {
+	return r.parent.parent.FieldStorageInfos
 }
 
-// BitBuffer for bit-level operations
-type BitBuffer struct {
+func newWDC5BitBuffer(buffer []byte) wdc5BitBuffer {
+	return wdc5BitBuffer{inner: buffer}
+}
+
+// wdc5BitBuffer for bit-level operations
+type wdc5BitBuffer struct {
 	inner []byte
 }
 
-// NewBitBuffer creates a new BitBuffer
-func NewBitBuffer(buffer []byte) *BitBuffer {
-	return &BitBuffer{inner: buffer}
-}
-
 // GetUnsigned gets an unsigned value from the buffer
-func (b *BitBuffer) GetUnsigned(index, size int) uint64 {
+func (b wdc5BitBuffer) GetUnsigned(index, size uint) uint64 {
 	if size <= 0 || size >= 64 {
 		panic("invalid size")
 	}
@@ -533,7 +510,7 @@ func (b *BitBuffer) GetUnsigned(index, size int) uint64 {
 }
 
 // GetSigned gets a signed value from the buffer
-func (b *BitBuffer) GetSigned(index, size int) int64 {
+func (b wdc5BitBuffer) GetSigned(index, size uint) int64 {
 	value := b.GetUnsigned(index, size)
 	// Do bit extend if needed
 	signMask := uint64(1) << uint(size-1)
@@ -541,4 +518,12 @@ func (b *BitBuffer) GetSigned(index, size int) int64 {
 		value |= ^((uint64(1) << uint(size)) - 1)
 	}
 	return int64(value)
+}
+
+func stringFromNullTermBytes(buf []byte) string {
+	nullIndex := bytes.IndexByte(buf, 0)
+	if nullIndex == -1 {
+		return ""
+	}
+	return string(buf[:nullIndex])
 }
