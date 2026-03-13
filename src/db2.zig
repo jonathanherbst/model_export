@@ -685,4 +685,8 @@ test "bitbuffer" {
     try expectEqual(0x23, buffer.get_unsigned(8, 8));
     try expectEqual(0x4523, buffer.get_unsigned(8, 16));
     try expectEqual(582, buffer.get_unsigned(7, 10));
+
+    const data = [_]u8{ 51, 51, 243, 63, 168, 87, 202, 188, 184, 30, 133, 190, 0, 0, 0, 0, 66, 96, 229, 188, 0, 0, 0, 0, 1, 176, 34, 142, 51, 2, 0, 160, 153, 153, 241, 103, 143, 194, 213, 23 };
+    const buffer2 = BitBuffer.from_buffer(&data);
+    try expectEqual(37, buffer2.get_unsigned(49, 6));
 }

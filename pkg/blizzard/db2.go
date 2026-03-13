@@ -268,6 +268,11 @@ func (file *DB2File) FixedRecords(yield func(DB2FixedRecord) bool) {
 // Iterate all sections in the file
 func (file *DB2File) GetSections(yield func(DB2Section) bool) {
 	for _, header := range file.Sections {
+		if header.TactKeyHash != 0 {
+			// we don't know how to handle encrypted sections yet
+			continue
+		}
+
 		if _, err := file.reader.Seek(int64(header.FileOffset), 0); err != nil {
 			continue
 		}
@@ -461,18 +466,15 @@ func (r DB2FixedRecord) getFieldWithID(index uint) interface{} {
 		size := field.FieldSizeBits / 8
 		return r.data.inner[offset : offset+size]
 	case FieldCompressionBitpacked:
-		params := field.BitpackedParams()
-		return r.data.GetUnsigned(uint(params.OffsetBits), uint(params.SizeBits))
+		return r.data.GetUnsigned(uint(field.FieldOffsetBits), uint(field.FieldSizeBits))
 	case FieldCompressionBitpackedSigned:
-		params := field.BitpackedParams()
-		return r.data.GetSigned(uint(params.OffsetBits), uint(params.SizeBits))
+		return r.data.GetSigned(uint(field.FieldOffsetBits), uint(field.FieldSizeBits))
 	case FieldCompressionBitpackedIndexed:
-		params := field.BitpackedIndexParams()
-		palletIndex := r.data.GetUnsigned(uint(params.OffsetBits), uint(params.SizeBits))
+		palletIndex := r.data.GetUnsigned(uint(field.FieldOffsetBits), uint(field.FieldSizeBits))
 		return r.parent.parent.PalletData[palletIndex]
 	case FieldCompressionBitpackedIndexedArray:
 		params := field.BitpackedIndexParams()
-		palletIndex := r.data.GetUnsigned(uint(params.OffsetBits), uint(params.SizeBits))
+		palletIndex := r.data.GetUnsigned(uint(field.FieldOffsetBits), uint(field.FieldSizeBits))
 		return r.parent.parent.PalletData[palletIndex : palletIndex+uint64(params.ArrayCount)]
 	case FieldCompressionCommonData:
 		if val, ok := r.parent.parent.CommonData[r.GetID()]; ok {
