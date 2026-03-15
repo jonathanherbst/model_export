@@ -398,7 +398,7 @@ func (r DB2FixedRecord) GetID() uint32 {
 	if r.id != nil {
 		return *r.id
 	}
-	idField := r.getFieldWithID(uint(r.parent.parent.Header.IDIndex))
+	idField := r.getFieldWithID(int(r.parent.parent.Header.IDIndex))
 	switch f := idField.(type) {
 	case int64:
 		return uint32(f)
@@ -418,18 +418,18 @@ func (r DB2FixedRecord) NumFields() int {
 }
 
 // GetField returns the field at the given index
-func (r DB2FixedRecord) GetField(index uint) interface{} {
+func (r DB2FixedRecord) GetField(index int) interface{} {
 	if r.id != nil {
 		return r.getFieldWithID(index)
 	}
-	if index < uint(r.parent.parent.Header.IDIndex) {
+	if index < int(r.parent.parent.Header.IDIndex) {
 		return r.getFieldWithID(index)
 	}
 	return r.getFieldWithID(index + 1)
 }
 
 // GetFieldAsString returns the field as a string
-func (r DB2FixedRecord) GetFieldAsString(index uint) string {
+func (r DB2FixedRecord) GetFieldAsString(index int) string {
 	field := r.GetField(index)
 	var stringIndex uint32
 	switch f := field.(type) {
@@ -452,13 +452,13 @@ func (r DB2FixedRecord) GetFieldAsString(index uint) string {
 	}
 	// String indexes are referenced from where the field begins in the record.
 	// Calculate the index from the beginning of the record.
-	recordIndex := uint(stringIndex) + r.index + uint(r.fields()[index].FieldOffsetBits/8)
+	recordIndex := uint(stringIndex) + r.index*uint(r.parent.parent.Header.RecordSize) + uint(r.fields()[index].FieldOffsetBits/8)
 	// get_string indexes from the string block
 	return r.parent.getString(recordIndex)
 }
 
 // getFieldWithID gets the field with the given ID
-func (r DB2FixedRecord) getFieldWithID(index uint) interface{} {
+func (r DB2FixedRecord) getFieldWithID(index int) interface{} {
 	field := r.fields()[index]
 	switch field.StorageType {
 	case FieldCompressionNone:
