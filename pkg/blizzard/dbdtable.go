@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"reflect"
 	"slices"
 )
 
@@ -58,6 +59,7 @@ func (r DBDRecord) GetNumFields() int {
 	return r.record.NumFields()
 }
 
+// Can return an int64, a uint64, a string, a []int64, or a []uint64
 func (r DBDRecord) GetField(index int) interface{} {
 	column := r.Schema.GetColumn(index)
 	db2_field := r.record.GetField(index)
@@ -65,14 +67,15 @@ func (r DBDRecord) GetField(index int) interface{} {
 	case int64:
 		switch column.FieldType {
 		case S8:
-			return int8(f)
+			return f
 		case S16:
-			return int16(f)
+			return f
 		case S32:
-			return int32(f)
+			return f
 		case S64:
 			return f
 		case String:
+			return r.record.GetFieldAsString(index)
 		case LocString:
 			return r.record.GetFieldAsString(index)
 		default:
@@ -81,16 +84,17 @@ func (r DBDRecord) GetField(index int) interface{} {
 	case uint64:
 		switch column.FieldType {
 		case U8:
-			return uint8(f)
+			return f
 		case U16:
-			return uint16(f)
+			return f
 		case U32:
-			return uint32(f)
+			return f
 		case U64:
 			return f
 		case Float:
 			return math.Float32frombits(uint32(f))
 		case String:
+			return r.record.GetFieldAsString(index)
 		case LocString:
 			return r.record.GetFieldAsString(index)
 		default:
@@ -99,11 +103,11 @@ func (r DBDRecord) GetField(index int) interface{} {
 	case uint32:
 		switch column.FieldType {
 		case U8:
-			return uint8(f)
+			return uint64(f)
 		case U16:
-			return uint16(f)
+			return uint64(f)
 		case U32:
-			return f
+			return uint64(f)
 		case Float:
 			return math.Float32frombits(uint32(f))
 		case String:
@@ -116,81 +120,21 @@ func (r DBDRecord) GetField(index int) interface{} {
 	case []byte:
 		switch column.FieldType {
 		case U8:
-			if column.ArrayLen > 0 {
-				return f
-			} else {
-				return f[0]
-			}
+			return bytesToUnsignedInts[uint8](f, column.ArrayLen)
 		case S8:
-			if column.ArrayLen > 0 {
-				seq := make([]int8, len(f))
-				for i, v := range f {
-					seq[i] = int8(v)
-				}
-				return seq
-			} else {
-				return int8(f[0])
-			}
+			return bytesToSignedInts[int8](f, column.ArrayLen)
 		case U16:
-			var seq []uint16
-			for c := range slices.Chunk(f, 2) {
-				seq = append(seq, binary.LittleEndian.Uint16(c))
-			}
-			if column.ArrayLen > 0 {
-				return seq
-			} else {
-				return seq[0]
-			}
+			return bytesToUnsignedInts[uint16](f, column.ArrayLen)
 		case S16:
-			var seq []int16
-			for c := range slices.Chunk(f, 2) {
-				seq = append(seq, int16(binary.LittleEndian.Uint16(c)))
-			}
-			if column.ArrayLen > 0 {
-				return seq
-			} else {
-				return seq[0]
-			}
+			return bytesToSignedInts[int16](f, column.ArrayLen)
 		case U32:
-			var seq []uint32
-			for c := range slices.Chunk(f, 4) {
-				seq = append(seq, binary.LittleEndian.Uint32(c))
-			}
-			if column.ArrayLen > 0 {
-				return seq
-			} else {
-				return seq[0]
-			}
+			return bytesToUnsignedInts[uint32](f, column.ArrayLen)
 		case S32:
-			var seq []int32
-			for c := range slices.Chunk(f, 4) {
-				seq = append(seq, int32(binary.LittleEndian.Uint32(c)))
-			}
-			if column.ArrayLen > 0 {
-				return seq
-			} else {
-				return seq[0]
-			}
+			return bytesToSignedInts[int32](f, column.ArrayLen)
 		case U64:
-			var seq []uint64
-			for c := range slices.Chunk(f, 8) {
-				seq = append(seq, binary.LittleEndian.Uint64(c))
-			}
-			if column.ArrayLen > 0 {
-				return seq
-			} else {
-				return seq[0]
-			}
+			return bytesToUnsignedInts[uint64](f, column.ArrayLen)
 		case S64:
-			var seq []int64
-			for c := range slices.Chunk(f, 8) {
-				seq = append(seq, int64(binary.LittleEndian.Uint64(c)))
-			}
-			if column.ArrayLen > 0 {
-				return seq
-			} else {
-				return seq[0]
-			}
+			return bytesToSignedInts[int64](f, column.ArrayLen)
 		case Float:
 			var seq []float32
 			for c := range slices.Chunk(f, 4) {
@@ -211,23 +155,27 @@ func (r DBDRecord) GetField(index int) interface{} {
 	case []uint32:
 		switch column.FieldType {
 		case U16:
-			seq := make([]uint16, len(f))
+			seq := make([]uint64, len(f))
 			for i, c := range f {
-				seq[i] = uint16(c)
+				seq[i] = uint64(c)
 			}
 			return seq
 		case S16:
-			seq := make([]int16, len(f))
+			seq := make([]int64, len(f))
 			for i, c := range f {
-				seq[i] = int16(c)
+				seq[i] = int64(int16(c))
 			}
 			return seq
 		case U32:
-			return f
-		case S32:
-			seq := make([]uint32, len(f))
+			seq := make([]uint64, len(f))
 			for i, c := range f {
-				seq[i] = uint32(c)
+				seq[i] = uint64(c)
+			}
+			return seq
+		case S32:
+			seq := make([]int64, len(f))
+			for i, c := range f {
+				seq[i] = int64(int32(c))
 			}
 			return seq
 		case Float:
@@ -241,4 +189,80 @@ func (r DBDRecord) GetField(index int) interface{} {
 		}
 	}
 	panic("unhandled field type")
+}
+
+// bytesToUnsignedInts converts a byte slice into a slice of uint64, parsing as little endian.
+// T must be an unsigned integer type (8 to 64 bits) that determines the parsing size.
+// Panics if the byte array size does not match the expected count.
+func bytesToUnsignedInts[T ~uint8 | ~uint16 | ~uint32 | ~uint64](data []byte, arrayLen int) interface{} {
+	if arrayLen == 0 {
+		return bytesToUnsignedInt[T](data)
+	}
+
+	var zero T
+	typ := reflect.TypeOf(zero)
+	size := int(typ.Size())
+	if len(data) != arrayLen*size {
+		panic("byte array size does not match expected count")
+	}
+	result := make([]uint64, 0, arrayLen)
+	for chunk := range slices.Chunk(data, size) {
+		result = append(result, bytesToUnsignedInt[T](chunk))
+	}
+	return result
+}
+
+func bytesToUnsignedInt[T ~uint8 | ~uint16 | ~uint32 | ~uint64](data []byte) uint64 {
+	var zero T
+	typ := reflect.TypeOf(zero)
+	switch typ.Kind() {
+	case reflect.Uint8:
+		return uint64(data[0])
+	case reflect.Uint16:
+		return uint64(binary.LittleEndian.Uint16(data))
+	case reflect.Uint32:
+		return uint64(binary.LittleEndian.Uint32(data))
+	case reflect.Uint64:
+		return binary.LittleEndian.Uint64(data)
+	default:
+		panic("unsupported type")
+	}
+}
+
+// bytesToSignedInts converts a byte slice into a slice of int64, parsing as little endian.
+// T must be a signed integer type (8 to 64 bits) that determines the parsing size.
+// Panics if the byte array size does not match the expected count.
+func bytesToSignedInts[T ~int8 | ~int16 | ~int32 | ~int64](data []byte, arrayLen int) interface{} {
+	if arrayLen == 0 {
+		return bytesToSignedInt[T](data)
+	}
+
+	var zero T
+	typ := reflect.TypeOf(zero)
+	size := int(typ.Size())
+	if len(data) != arrayLen*size {
+		panic("byte array size does not match expected count")
+	}
+	result := make([]int64, 0, arrayLen)
+	for chunk := range slices.Chunk(data, size) {
+		result = append(result, bytesToSignedInt[T](chunk))
+	}
+	return result
+}
+
+func bytesToSignedInt[T ~int8 | ~int16 | ~int32 | ~int64](data []byte) int64 {
+	var zero T
+	typ := reflect.TypeOf(zero)
+	switch typ.Kind() {
+	case reflect.Int8:
+		return int64(int8(data[0]))
+	case reflect.Int16:
+		return int64(int16(binary.LittleEndian.Uint16(data)))
+	case reflect.Int32:
+		return int64(int32(binary.LittleEndian.Uint32(data)))
+	case reflect.Int64:
+		return int64(binary.LittleEndian.Uint64(data))
+	default:
+		panic("unsupported type")
+	}
 }

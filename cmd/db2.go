@@ -98,6 +98,9 @@ func printDBDInfo(table blizzard.DBDTable) {
 	fmt.Printf("DBD Schema: %s\n", inline)
 	for i, column := range table.Schema.Columns {
 		fmt.Printf("\t%s: %s", column.Name, dbdFieldTypeString(column.FieldType))
+		if column.ArrayLen > 0 {
+			fmt.Printf("[%d]", column.ArrayLen)
+		}
 		if i == table.Schema.IDIndex {
 			fmt.Printf(" (id)")
 		}
@@ -138,18 +141,6 @@ func printDBDRecords(table blizzard.DBDTable) {
 		for index := range record.GetNumFields() {
 			field := record.GetField(index)
 			switch field := field.(type) {
-			case uint8:
-				fmt.Printf(" %d", field)
-			case int8:
-				fmt.Printf(" %d", field)
-			case uint16:
-				fmt.Printf(" %d", field)
-			case int16:
-				fmt.Printf(" %d", field)
-			case uint32:
-				fmt.Printf(" %d", field)
-			case int32:
-				fmt.Printf(" %d", field)
 			case uint64:
 				fmt.Printf(" %d", field)
 			case int64:
@@ -158,25 +149,13 @@ func printDBDRecords(table blizzard.DBDTable) {
 				fmt.Printf(" \"%s\"", field)
 			case float32:
 				fmt.Printf(" %f", field)
-			case []uint16:
+			case []uint64:
 				fmt.Printf(" [%d", field[0])
 				for _, v := range field[1:] {
 					fmt.Printf(", %d", v)
 				}
 				fmt.Printf("]")
-			case []int16:
-				fmt.Printf(" [%d", field[0])
-				for _, v := range field[1:] {
-					fmt.Printf(", %d", v)
-				}
-				fmt.Printf("]")
-			case []uint32:
-				fmt.Printf(" [%d", field[0])
-				for _, v := range field[1:] {
-					fmt.Printf(", %d", v)
-				}
-				fmt.Printf("]")
-			case []int32:
+			case []int64:
 				fmt.Printf(" [%d", field[0])
 				for _, v := range field[1:] {
 					fmt.Printf(", %d", v)
