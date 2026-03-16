@@ -75,7 +75,11 @@ func init() {
 		Name: "ls",
 		Help: "ls <match> `List all files that match the match statement`",
 		Handler: func(args []string, casc *blizzard.Casc) error {
-			for f := range func(yield func(blizzard.FileData) bool) { casc.SearchFiles(args[0], yield) } {
+			match := ""
+			if len(args) > 0 {
+				match = args[0]
+			}
+			for f := range func(yield func(blizzard.FileData) bool) { casc.SearchFiles(match, yield) } {
 				fmt.Println(f.Name)
 			}
 			return nil
