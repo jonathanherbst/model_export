@@ -36,6 +36,7 @@ func (casc Casc) Close() {
 
 func (casc Casc) SearchFiles(mask string, yield func(FileData) bool) {
 	iter, err := casclib_sys.FindFirstFile(casc.storage, mask, casc.ListFilePath)
+	defer casclib_sys.FindClose(iter)
 	for err == nil {
 		if !yield(FileData{
 			Name:   iter.Name(),
@@ -45,7 +46,6 @@ func (casc Casc) SearchFiles(mask string, yield func(FileData) bool) {
 		}
 		err = casclib_sys.FindNextFile(iter)
 	}
-	casclib_sys.FindClose(iter)
 }
 
 func (casc Casc) OpenFileByName(name string, zeroEncrypted bool) (*CascFile, error) {

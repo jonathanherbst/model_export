@@ -46,6 +46,7 @@ enum {
 import "C"
 import (
 	"errors"
+	"runtime"
 	"unsafe"
 )
 
@@ -178,6 +179,9 @@ func (iter FileIterator) Name() string {
 }
 
 func FindNextFile(iter *FileIterator) error {
+	var p runtime.Pinner
+	defer p.Unpin()
+	p.Pin(iter)
 	if !C.CascFindNextFile(iter.handle, &iter.data) {
 		return getError()
 	}
