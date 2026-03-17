@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"jph/model-export/pkg/blizzard"
 	"os"
 	"strings"
@@ -82,6 +83,33 @@ func init() {
 			for f := range func(yield func(blizzard.FileData) bool) { casc.SearchFiles(match, yield) } {
 				fmt.Println(f.Name)
 			}
+			return nil
+		},
+	})
+
+	register(Command{
+		Name: "x",
+		Help: "x <casc_path> <extract_path> `Extract a file from the casc`",
+		Handler: func(args []string, casc *blizzard.Casc) error {
+			f, err := os.Create(args[1])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to open extract file: %v\n", err)
+				os.Exit(1)
+			}
+			defer f.Close()
+
+			casc_f, err := casc.OpenFileByName(args[0], true)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to open casc file: %v\n", err)
+				os.Exit(2)
+			}
+			defer casc_f.Close()
+
+			len, err := io.Copy(f, casc_f)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%d bytes written to %s\n", len, args[1])
 			return nil
 		},
 	})

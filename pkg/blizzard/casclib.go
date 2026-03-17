@@ -2,14 +2,16 @@ package blizzard
 
 import (
 	"fmt"
+	"io"
 	casclib_sys "jph/model-export/pkg/casclib-sys"
 )
 
 type Casc struct {
-	storage      casclib_sys.Storage
-	ProductName  string
-	BuildNumber  uint32
-	ListFilePath *string
+	storage        casclib_sys.Storage
+	ProductName    string
+	BuildNumber    uint32
+	ListFilePath   *string
+	listfileLoaded bool
 }
 
 func OpenCasc(path string) (*Casc, error) {
@@ -24,9 +26,10 @@ func OpenCasc(path string) (*Casc, error) {
 	}
 
 	return &Casc{
-		storage:     storage,
-		ProductName: info.CodeName,
-		BuildNumber: info.BuildNumber,
+		storage:        storage,
+		ProductName:    info.CodeName,
+		BuildNumber:    info.BuildNumber,
+		listfileLoaded: false,
 	}, nil
 }
 
@@ -34,9 +37,10 @@ func (casc Casc) Close() {
 	_ = casclib_sys.CloseStorage(casc.storage)
 }
 
-func (casc Casc) SearchFiles(mask string, yield func(FileData) bool) {
+func (casc *Casc) SearchFiles(mask string, yield func(FileData) bool) {
 	iter, err := casclib_sys.FindFirstFile(casc.storage, mask, casc.ListFilePath)
 	defer casclib_sys.FindClose(iter)
+	casc.listfileLoaded = true
 	for err == nil {
 		if !yield(FileData{
 			Name:   iter.Name(),
@@ -48,7 +52,11 @@ func (casc Casc) SearchFiles(mask string, yield func(FileData) bool) {
 	}
 }
 
-func (casc Casc) OpenFileByName(name string, zeroEncrypted bool) (*CascFile, error) {
+func (casc *Casc) OpenFileByName(name string, zeroEncrypted bool) (*CascFile, error) {
+	if !casc.listfileLoaded && casc.ListFilePath != nil {
+		casc.SearchFiles("", func(FileData) bool { return false })
+	}
+
 	var flags uint32 = 0
 	if zeroEncrypted {
 		flags |= casclib_sys.OF_OVERCOME_ENCRYPTED
@@ -78,7 +86,7 @@ func (casc Casc) OpenFileById(id uint32, zeroEncrypted bool) (*CascFile, error) 
 
 type FileData struct {
 	Name   string
-	parent Casc
+	parent *Casc
 }
 
 func (data FileData) Open(zeroEncrypted bool) (*CascFile, error) {
@@ -98,10 +106,13 @@ func (file CascFile) Close() error {
 	return nil
 }
 
-func (file CascFile) Read(buffer []byte) (uint, error) {
+func (file CascFile) Read(buffer []byte) (int, error) {
 	len, err := casclib_sys.ReadFile(file.handle, buffer)
 	if err != nil {
 		return 0, fmt.Errorf("faile reading a file: %w", err)
+	}
+	if len == 0 {
+		return 0, io.EOF
 	}
 	return len, nil
 }

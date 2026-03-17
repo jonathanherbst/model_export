@@ -45,7 +45,7 @@ enum {
 */
 import "C"
 import (
-	"errors"
+	"fmt"
 	"runtime"
 	"unsafe"
 )
@@ -137,12 +137,12 @@ func CloseFile(file File) error {
 	return nil
 }
 
-func ReadFile(file File, buffer []byte) (uint, error) {
+func ReadFile(file File, buffer []byte) (int, error) {
 	var bytes_read C.DWORD
 	if !C.CascReadFile(C.HANDLE(file), unsafe.Pointer(&buffer[0]), C.DWORD(len(buffer)), &bytes_read) {
 		return 0, getError()
 	}
-	return uint(bytes_read), nil
+	return int(bytes_read), nil
 }
 
 func SetFilePointer64(file File, off int64) (uint64, error) {
@@ -197,7 +197,8 @@ func FindClose(iter *FileIterator) error {
 
 // Get the error when a function returns nil, or false
 func getError() error {
-	return errors.New(errorCodeNames[int(C.GetCascError())])
+	err := int(C.GetCascError())
+	return fmt.Errorf("%s - %d", errorCodeNames[err], err)
 }
 
 var (
@@ -249,6 +250,7 @@ var errorCodeNames = map[int]string{
 	ErrorFileCorrupt:        "corrupt file",
 	ErrorFileEncrypted:      "encrypted file",
 	ErrorFileTooLarge:       "file too large",
+	ErrorFileOffline:        "file offline",
 	ErrorCancelled:          "cancelled",
 	ErrorIndexParsingDone:   "index parsing done",
 	ErrorReparseRoot:        "reparse root",
