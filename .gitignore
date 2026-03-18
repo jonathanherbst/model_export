@@ -14,3 +14,6 @@ build-casclib
 *.csv
 dbd
 *.zip
+
+# go build artifacts
+model-export

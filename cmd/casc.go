@@ -25,13 +25,28 @@ var cascCmd = &cobra.Command{
 	- extract files
 	- work with database files`,
 	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println("opening casc...")
 		casc, err := blizzard.OpenCasc(args[0])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to open casc %s\n", err)
 			os.Exit(2)
 		}
-		defer casc.Close()
 		fmt.Printf("casc product - %s, build - %d\n", casc.ProductName, casc.BuildNumber)
+
+		var casc_extra interface{}
+		if blizzard.IsWOWCasc(casc) {
+			fmt.Println("detected wow casc, opening...")
+			wow, err := blizzard.OpenWOWCasc(casc, ".")
+			if err != nil {
+				casc.Close()
+				fmt.Fprintf(os.Stderr, "Failed to open wow casc %s\n", err)
+				os.Exit(2)
+			}
+			casc_extra = wow
+			defer wow.Close()
+		} else {
+			defer casc.Close()
+		}
 
 		listfile, err := cmd.Flags().GetString("listfile")
 		if err == nil && listfile != "" {
@@ -54,7 +69,7 @@ var cascCmd = &cobra.Command{
 			cmdName := tokens[0]
 			args := tokens[1:]
 			if cmd, ok := commands[cmdName]; ok {
-				if err := cmd.Handler(args, casc); err != nil {
+				if err := cmd.Handler(args, casc, casc_extra); err != nil {
 					if errors.Is(err, ErrExit) {
 						fmt.Println("goodbye")
 						break
@@ -75,7 +90,7 @@ func init() {
 	register(Command{
 		Name: "ls",
 		Help: "ls <match> `List all files that match the match statement`",
-		Handler: func(args []string, casc *blizzard.Casc) error {
+		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
 			match := ""
 			if len(args) > 0 {
 				match = args[0]
@@ -90,7 +105,7 @@ func init() {
 	register(Command{
 		Name: "x",
 		Help: "x <casc_path> <extract_path> `Extract a file from the casc`",
-		Handler: func(args []string, casc *blizzard.Casc) error {
+		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
 			f, err := os.Create(args[1])
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "failed to open extract file: %v\n", err)
@@ -115,9 +130,31 @@ func init() {
 	})
 
 	register(Command{
+		Name: "tables",
+		Help: "tables [<match>] `list tables available in the casc (wow only)`",
+		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
+			match := ""
+			if len(args) > 0 {
+				match = args[0]
+			}
+
+			switch x := extra.(type) {
+			case *blizzard.WOWCasc:
+				for name := range x.GetTables {
+					if match == "" || strings.Contains(name, match) {
+						fmt.Printf("%s ", name)
+					}
+				}
+				fmt.Println()
+			}
+			return nil
+		},
+	})
+
+	register(Command{
 		Name: "help",
 		Help: "list available commands",
-		Handler: func(args []string, casc *blizzard.Casc) error {
+		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
 			fmt.Println("commands:")
 			for _, cmd := range commands {
 				fmt.Printf("  %-10s %s\n", cmd.Name, cmd.Help)
@@ -129,14 +166,14 @@ func init() {
 	register(Command{
 		Name: "exit",
 		Help: "quit the program",
-		Handler: func(args []string, casc *blizzard.Casc) error {
+		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
 			return ErrExit
 		},
 	})
 	register(Command{
 		Name: "quit",
 		Help: "alias for exit",
-		Handler: func(args []string, casc *blizzard.Casc) error {
+		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
 			return ErrExit
 		},
 	})
@@ -145,7 +182,7 @@ func init() {
 type Command struct {
 	Name    string
 	Help    string
-	Handler func(args []string, casc *blizzard.Casc) error
+	Handler func(args []string, casc *blizzard.Casc, casc_extra interface{}) error
 }
 
 var commands = map[string]Command{}
