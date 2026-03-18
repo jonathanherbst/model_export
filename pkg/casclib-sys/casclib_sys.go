@@ -63,6 +63,24 @@ func OpenStorage(path string) (Storage, error) {
 	return Storage(handle), nil
 }
 
+func OpenOnlineStorage(cache string, code string, url string, region string) (Storage, error) {
+	params := cache
+	if url != "" {
+		params += ":" + url
+	}
+	params += ":" + code
+	if region != "" {
+		params += ":" + region
+	}
+	cparams := C.CString(params)
+	defer C.free(unsafe.Pointer(cparams))
+	var handle C.HANDLE
+	if !C.CascOpenOnlineStorage(cparams, C.CASC_LOCALE_ALL, &handle) {
+		return nil, getError()
+	}
+	return Storage(handle), nil
+}
+
 func CloseStorage(handle Storage) error {
 	if !C.CascCloseStorage(C.HANDLE(handle)) {
 		return getError()

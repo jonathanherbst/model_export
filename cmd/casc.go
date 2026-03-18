@@ -26,6 +26,7 @@ var cascCmd = &cobra.Command{
 	- work with database files`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("opening casc...")
+		//casc, err := blizzard.OpenOnlineCasc(args[0], "wow")
 		casc, err := blizzard.OpenCasc(args[0])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to open casc %s\n", err)
@@ -146,6 +147,30 @@ func init() {
 					}
 				}
 				fmt.Println()
+			default:
+				fmt.Println("unsupported casc product")
+			}
+			return nil
+		},
+	})
+
+	register(Command{
+		Name: "tableinfo",
+		Help: "tableinfo <table_name> `print information about table schema`",
+		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
+			name := args[0]
+
+			switch x := extra.(type) {
+			case *blizzard.WOWCasc:
+				table, err := x.GetTable(name)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to open the table: %v\n", err)
+					return nil
+				}
+				defer table.Close()
+				printDBDInfo(*table)
+			default:
+				fmt.Println("unsupported casc product")
 			}
 			return nil
 		},

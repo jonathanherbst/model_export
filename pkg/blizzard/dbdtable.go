@@ -37,6 +37,10 @@ type DBDTable struct {
 	database *DB2File
 }
 
+func (table DBDTable) Close() {
+	table.database.Close()
+}
+
 func (table DBDTable) GetRecords(yield func(DBDRecord) bool) {
 	for db2_record := range table.database.FixedRecords {
 		record := DBDRecord{table.Schema, db2_record}

@@ -33,6 +33,25 @@ func OpenCasc(path string) (*Casc, error) {
 	}, nil
 }
 
+func OpenOnlineCasc(cache string, code string) (*Casc, error) {
+	storage, err := casclib_sys.OpenOnlineStorage(cache, code, "us", "http://level3.blizzard.com/?maxhosts=8")
+	if err != nil {
+		return nil, fmt.Errorf("open casc failed: %w", err)
+	}
+
+	info, err := casclib_sys.GetStorageInfoProduct(storage)
+	if err != nil {
+		return nil, fmt.Errorf("get casc info failed: %w", err)
+	}
+
+	return &Casc{
+		storage:        storage,
+		ProductName:    info.CodeName,
+		BuildNumber:    info.BuildNumber,
+		listfileLoaded: false,
+	}, nil
+}
+
 func (casc Casc) Close() {
 	_ = casclib_sys.CloseStorage(casc.storage)
 }

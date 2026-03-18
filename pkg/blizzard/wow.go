@@ -1,6 +1,7 @@
 package blizzard
 
 import (
+	"archive/zip"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -41,23 +42,23 @@ func OpenWOWCasc(casc *Casc, cachePath string) (*WOWCasc, error) {
 		tables[table_name] = file_data.Name
 	}
 
-	dbd_repo, err := OpenDBDZipRepo(dbdPath)
+	zipReader, err := zip.OpenReader(dbdPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open wow casc: %w", err)
+		return nil, fmt.Errorf("failed to open dbd zip: %w", err)
 	}
 
-	return &WOWCasc{casc, dbd_repo, tables}, nil
+	return &WOWCasc{casc, zipReader, tables}, nil
 }
 
 type WOWCasc struct {
-	casc     *Casc
-	dbd_repo *DBDZipRepo
-	tables   map[string]string
+	casc   *Casc
+	dbdZip *zip.ReadCloser
+	tables map[string]string
 }
 
 func (wow *WOWCasc) Close() {
 	wow.casc.Close()
-	wow.dbd_repo.Close()
+	wow.dbdZip.Close()
 }
 
 func (wow *WOWCasc) GetTables(yield func(string) bool) {
@@ -66,6 +67,32 @@ func (wow *WOWCasc) GetTables(yield func(string) bool) {
 			return
 		}
 	}
+}
+
+func (wow *WOWCasc) GetTable(name string) (*DBDTable, error) {
+	file, err := wow.casc.OpenFileByName(wow.tables[name], true)
+	if err != nil {
+		return nil, fmt.Errorf("get table file: %w", err)
+	}
+	db2, err := OpenDB2File(file)
+	if err != nil {
+		file.Close()
+		return nil, fmt.Errorf("get table, open db2: %w", err)
+	}
+	dbdName := name + ".dbd"
+	dbd, err := wow.dbdZip.Open(dbdName)
+	if err != nil {
+		db2.Close()
+		return nil, fmt.Errorf("get table, open dbd: %w", err)
+	}
+	defer dbd.Close()
+
+	table, err := DBDTableFromReader(dbd, db2)
+	if err != nil {
+		db2.Close()
+		return nil, fmt.Errorf("get table, open table: %w", err)
+	}
+	return table, nil
 }
 
 func WOWGetLatestListfile(cachePath string) (string, error) {
