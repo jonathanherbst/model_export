@@ -1,7 +1,6 @@
 package blizzard
 
 import (
-	"archive/zip"
 	"bufio"
 	"errors"
 	"fmt"
@@ -73,9 +72,10 @@ func DBDFromReader(r io.Reader, selector DBDSchemaSelector) (*DBDSchema, error) 
 						arrayLen = *rcd.ArrayLength
 					}
 					columns = append(columns, DBDColumn{
-						Name:      rcd.ColumnName,
-						FieldType: ft,
-						ArrayLen:  arrayLen,
+						Name:       rcd.ColumnName,
+						FieldType:  ft,
+						ArrayLen:   arrayLen,
+						ForeignKey: cd.ForeignKey,
 					})
 					if rcd.Annotations.ID {
 						idIndex = len(columns) - 1
@@ -160,45 +160,6 @@ func (ft DBDFieldType) IsString() bool {
 	return ft == String || ft == LocString
 }
 
-// DBDZipRepo loads DBD schemas from a zip file containing DBD files
-type DBDZipRepo struct {
-	zipReader *zip.ReadCloser
-}
-
-// NewDBDZipRepo opens a zip file and returns a DBDZipRepo for reading schemas
-func OpenDBDZipRepo(zipPath string) (*DBDZipRepo, error) {
-	zipReader, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create zip reader: %w", err)
-	}
-
-	// Note: file is kept open and will be closed when the underlying file handle is garbage collected
-	// For more control, consider storing the file handle in the struct and closing it explicitly
-
-	return &DBDZipRepo{zipReader}, nil
-}
-
-func (repo *DBDZipRepo) Close() {
-	_ = repo.zipReader.Close()
-}
-
-// GetSchema retrieves and parses a DBD schema from the zip file by name.
-// name should be the DBD filename without the .dbd extension (e.g., "ChrRaces")
-func (repo *DBDZipRepo) GetSchema(name string, selector DBDSchemaSelector) (*DBDSchema, error) {
-	dbdFileName := name + ".dbd"
-	file, err := repo.zipReader.Open(dbdFileName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open DBD file %s in zip: %w", dbdFileName, err)
-	}
-	defer file.Close()
-
-	schema, err := DBDFromReader(file, selector)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse DBD schema %s: %w", dbdFileName, err)
-	}
-	return schema, nil
-}
-
 func fieldTypeFromParts(cdft columnDefFieldType, size *fieldSize) (DBDFieldType, error) {
 	switch cdft {
 	case Int:
@@ -267,9 +228,10 @@ func (d *DBDSchema) GetColumn(index int) DBDColumn {
 }
 
 type DBDColumn struct {
-	Name      string
-	FieldType DBDFieldType
-	ArrayLen  int
+	Name       string
+	FieldType  DBDFieldType
+	ArrayLen   int
+	ForeignKey *string
 }
 
 type buildVersion struct {

@@ -419,13 +419,7 @@ func (r DB2FixedRecord) NumFields() int {
 
 // GetField returns the field at the given index
 func (r DB2FixedRecord) GetField(index int) interface{} {
-	if r.id != nil {
-		return r.getFieldWithID(index)
-	}
-	if index < int(r.parent.parent.Header.IDIndex) {
-		return r.getFieldWithID(index)
-	}
-	return r.getFieldWithID(index + 1)
+	return r.getFieldWithID(r.getFieldIndexWithID(index))
 }
 
 // GetFieldAsString returns the field as a string
@@ -452,9 +446,17 @@ func (r DB2FixedRecord) GetFieldAsString(index int) string {
 	}
 	// String indexes are referenced from where the field begins in the record.
 	// Calculate the index from the beginning of the record.
-	recordIndex := uint(stringIndex) + r.index*uint(r.parent.parent.Header.RecordSize) + uint(r.fields()[index].FieldOffsetBits/8)
+	fieldIndex := r.getFieldIndexWithID(index)
+	recordIndex := uint(stringIndex) + r.index*uint(r.parent.parent.Header.RecordSize) + uint(r.fields()[fieldIndex].FieldOffsetBits/8)
 	// get_string indexes from the string block
 	return r.parent.getString(recordIndex)
+}
+
+func (r DB2FixedRecord) getFieldIndexWithID(index int) int {
+	if r.id == nil && index >= int(r.parent.parent.Header.IDIndex) {
+		return index + 1
+	}
+	return index
 }
 
 // getFieldWithID gets the field with the given ID

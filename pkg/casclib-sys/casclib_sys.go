@@ -57,7 +57,7 @@ func OpenStorage(path string) (Storage, error) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 	var handle C.HANDLE
-	if !C.CascOpenStorage(cpath, C.CASC_LOCALE_ALL, &handle) {
+	if !C.CascOpenStorage(cpath, C.CASC_LOCALE_ENUS, &handle) {
 		return nil, getError()
 	}
 	return Storage(handle), nil
@@ -75,7 +75,7 @@ func OpenOnlineStorage(cache string, code string, url string, region string) (St
 	cparams := C.CString(params)
 	defer C.free(unsafe.Pointer(cparams))
 	var handle C.HANDLE
-	if !C.CascOpenOnlineStorage(cparams, C.CASC_LOCALE_ALL, &handle) {
+	if !C.CascOpenOnlineStorage(cparams, C.CASC_LOCALE_ENUS, &handle) {
 		return nil, getError()
 	}
 	return Storage(handle), nil

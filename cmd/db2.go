@@ -70,7 +70,7 @@ func init() {
 }
 
 func printDB2Info(db2 blizzard.DB2File) {
-	fmt.Printf("layout: %08X, schema: %s, flags: 0x%X\n", db2.GetLayoutHash(), db2.GetSchema(), db2.Header.Flags)
+	fmt.Printf("layout: %08X, schema: %s, flags: 0x%X, locale: %d\n", db2.GetLayoutHash(), db2.GetSchema(), db2.Header.Flags, db2.Header.Locale)
 	fmt.Printf("%d section(s), %d records of %d bytes with %d fields\n", len(db2.Sections), db2.Header.RecordCount, db2.Header.RecordSize, db2.Header.FieldCount)
 	fmt.Printf("%d bytes of pallet data, %d bytes of common data\n", len(db2.PalletData), len(db2.CommonData))
 
@@ -100,6 +100,9 @@ func printDBDInfo(table blizzard.DBDTable) {
 		fmt.Printf("\t%s: %s", column.Name, dbdFieldTypeString(column.FieldType))
 		if column.ArrayLen > 0 {
 			fmt.Printf("[%d]", column.ArrayLen)
+		}
+		if column.ForeignKey != nil {
+			fmt.Printf(" <%s>", *column.ForeignKey)
 		}
 		if i == table.Schema.IDIndex {
 			fmt.Printf(" (id)")

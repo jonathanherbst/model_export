@@ -177,6 +177,12 @@ func init() {
 	})
 
 	register(Command{
+		Name:    "select",
+		Help:    "select <columns> from <table_name> `print selected columns from table records`",
+		Handler: selectHandler,
+	})
+
+	register(Command{
 		Name: "help",
 		Help: "list available commands",
 		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
@@ -202,6 +208,103 @@ func init() {
 			return ErrExit
 		},
 	})
+}
+
+func selectHandler(args []string, casc *blizzard.Casc, extra interface{}) error {
+	if len(args) == 0 {
+		fmt.Fprintf(os.Stderr, "usage: select <columns> from <table_name>\n")
+		return nil
+	}
+	line := strings.Join(args, " ")
+	parts := strings.SplitN(line, " from ", 2)
+	if len(parts) != 2 {
+		fmt.Fprintf(os.Stderr, "usage: select <columns> from <table_name>\n")
+		return nil
+	}
+	columnsStr := strings.TrimSpace(parts[0])
+	tableName := strings.TrimSpace(parts[1])
+	if columnsStr == "" || tableName == "" {
+		fmt.Fprintf(os.Stderr, "usage: select <columns> from <table_name>\n")
+		return nil
+	}
+	columnNames := strings.Split(columnsStr, ",")
+	for i, col := range columnNames {
+		columnNames[i] = strings.TrimSpace(col)
+	}
+
+	switch x := extra.(type) {
+	case *blizzard.WOWCasc:
+		table, err := x.GetTable(tableName)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to open the table: %v\n", err)
+			return nil
+		}
+		defer table.Close()
+
+		// Get indices for columns
+		var indices []int
+		for _, colName := range columnNames {
+			idx, err := table.Schema.GetIndexByName(colName)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "unknown column: %s\n", colName)
+				return nil
+			}
+			indices = append(indices, idx)
+		}
+
+		// Iterate records
+		for record := range table.GetRecords {
+			for i, idx := range indices {
+				if i > 0 {
+					fmt.Print(" ")
+				}
+				var field interface{}
+				if idx == table.Schema.IDIndex {
+					field = uint64(record.GetID())
+				} else {
+					fieldIndex := idx
+					if idx > table.Schema.IDIndex {
+						fieldIndex--
+					}
+					field = record.GetField(fieldIndex)
+				}
+				switch f := field.(type) {
+				case uint64:
+					fmt.Printf("%d", f)
+				case int64:
+					fmt.Printf("%d", f)
+				case string:
+					fmt.Printf("\"%s\"", f)
+				case float32:
+					fmt.Printf("%f", f)
+				case []uint64:
+					fmt.Printf("[%d", f[0])
+					for _, v := range f[1:] {
+						fmt.Printf(",%d", v)
+					}
+					fmt.Printf("]")
+				case []int64:
+					fmt.Printf("[%d", f[0])
+					for _, v := range f[1:] {
+						fmt.Printf(",%d", v)
+					}
+					fmt.Printf("]")
+				case []float32:
+					fmt.Printf("[%f", f[0])
+					for _, v := range f[1:] {
+						fmt.Printf(",%f", v)
+					}
+					fmt.Printf("]")
+				default:
+					panic("unhandled field type")
+				}
+			}
+			fmt.Println()
+		}
+	default:
+		fmt.Println("unsupported casc product")
+	}
+	return nil
 }
 
 type Command struct {
