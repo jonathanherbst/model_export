@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 )
 
 // WDC5 DB2 Header
@@ -265,6 +266,26 @@ func (file *DB2File) FixedRecords(yield func(DB2FixedRecord) bool) {
 	}
 }
 
+func (file *DB2File) GetFixedRecordById(id uint32) *DB2FixedRecord {
+	for section := range file.GetSections {
+		record := section.GetFixedRecordById(id)
+		if record != nil {
+			return record
+		}
+	}
+	return nil
+}
+
+func (file *DB2File) GetFixedRecordsByForeignKey(id uint32, yield func(DB2FixedRecord) bool) {
+	for section := range file.GetSections {
+		for record := range func(yield func(DB2FixedRecord) bool) { section.GetFixedRecordsByForeignKey(id, yield) } {
+			if !yield(record) {
+				return
+			}
+		}
+	}
+}
+
 // Iterate all sections in the file
 func (file *DB2File) GetSections(yield func(DB2Section) bool) {
 	for _, header := range file.Sections {
@@ -317,10 +338,10 @@ func (file *DB2File) GetSections(yield func(DB2Section) bool) {
 			}
 		}
 
-		section.foreignKeyMap = make(map[uint32]uint32)
+		section.foreignKeyMap = make(map[uint32][]uint32)
 		if header.RelationshipDataSize > 0 {
 			var mapping WDC5RelationshipMapping
-			if err := binary.Read(file.reader, binary.LittleEndian, section.offsetIds); err != nil {
+			if err := binary.Read(file.reader, binary.LittleEndian, &mapping); err != nil {
 				continue
 			}
 			section.foreignKeyMinId = mapping.MinID
@@ -330,7 +351,13 @@ func (file *DB2File) GetSections(yield func(DB2Section) bool) {
 				if err := binary.Read(file.reader, binary.LittleEndian, &entry); err != nil {
 					break
 				}
-				section.foreignKeyMap[entry.ForeignID] = entry.RecordIndex
+				if entries, ok := section.foreignKeyMap[entry.ForeignID]; ok {
+					section.foreignKeyMap[entry.ForeignID] = append(entries, entry.RecordIndex)
+				} else {
+					section.foreignKeyMap[entry.ForeignID] = make([]uint32, 0, 1)
+					section.foreignKeyMap[entry.ForeignID] = append(section.foreignKeyMap[entry.ForeignID], entry.RecordIndex)
+				}
+
 			}
 		}
 
@@ -358,27 +385,69 @@ type DB2Section struct {
 	offsetIds       []uint32
 	foreignKeyMinId uint32
 	foreignKeyMaxId uint32
-	foreignKeyMap   map[uint32]uint32
+	foreignKeyMap   map[uint32][]uint32
 	numRecords      uint32
 }
 
 func (section *DB2Section) FixedRecords(yield func(DB2FixedRecord) bool) {
-	recordSize := uint(section.parent.Header.RecordSize)
-	for i := uint(0); i < uint(section.numRecords); i++ {
-		record := DB2FixedRecord{
-			section,
-			newWDC5BitBuffer(section.recordRegion[i*recordSize : (i+1)*recordSize]),
-			nil,
-			i,
-		}
-		if section.parent.HasNonInlineIDs() {
-			record.id = &section.idList[i]
-		}
-
-		if !yield(record) {
+	for idx := 0; idx < int(section.numRecords); idx++ {
+		if !yield(section.GetFixedRecord(idx)) {
 			break
 		}
 	}
+}
+
+func (section *DB2Section) GetFixedRecordById(id uint32) *DB2FixedRecord {
+	if section.parent.HasNonInlineIDs() {
+		if copied_id, ok := section.copyTable[id]; ok {
+			id = copied_id
+		}
+		idx := sort.Search(len(section.idList), func(i int) bool { return section.idList[i] >= id })
+		if idx < len(section.idList) && section.idList[idx] == id {
+			record := section.GetFixedRecord(idx)
+			return &record
+		}
+	} else {
+		for r := range section.FixedRecords {
+			if r.GetID() == id {
+				return &r
+			}
+		}
+	}
+	return nil
+}
+
+func (section *DB2Section) GetFixedRecordsByForeignKey(fk uint32, yield func(DB2FixedRecord) bool) {
+	if entries, ok := section.foreignKeyMap[fk]; ok {
+		if section.parent.HasRelationshipData() {
+			for _, id := range entries {
+				record := section.GetFixedRecordById(id)
+				if record != nil && !yield(*record) {
+					return
+				}
+			}
+		} else {
+			for _, idx := range entries {
+				if !yield(section.GetFixedRecord(int(idx))) {
+					return
+				}
+			}
+		}
+	}
+}
+
+func (section *DB2Section) GetFixedRecord(idx int) DB2FixedRecord {
+	recordSize := int(section.parent.Header.RecordSize)
+	record := DB2FixedRecord{
+		section,
+		newWDC5BitBuffer(section.recordRegion[idx*recordSize : (idx+1)*recordSize]),
+		nil,
+		uint(idx),
+	}
+	if section.parent.HasNonInlineIDs() {
+		record.id = &section.idList[idx]
+	}
+	return record
 }
 
 func (section DB2Section) getString(index uint) string {

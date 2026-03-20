@@ -50,6 +50,23 @@ func (table DBDTable) GetRecords(yield func(DBDRecord) bool) {
 	}
 }
 
+func (table DBDTable) GetFixedRecordById(id uint32) *DBDRecord {
+	db2_record := table.database.GetFixedRecordById(id)
+	if db2_record != nil {
+		return &DBDRecord{table.Schema, *db2_record}
+	}
+	return nil
+}
+
+func (table DBDTable) GetFixedRecordsByForeignKey(id uint32, yield func(DBDRecord) bool) {
+	for db2_record := range func(yield func(DB2FixedRecord) bool) { table.database.GetFixedRecordsByForeignKey(id, yield) } {
+		record := DBDRecord{table.Schema, db2_record}
+		if !yield(record) {
+			return
+		}
+	}
+}
+
 type DBDRecord struct {
 	Schema DBDSchema
 	record DB2FixedRecord
@@ -112,6 +129,12 @@ func (r DBDRecord) GetField(index int) interface{} {
 			return uint64(f)
 		case U32:
 			return uint64(f)
+		case S8:
+			return int64(int8(f))
+		case S16:
+			return int64(int16(f))
+		case S32:
+			return int64(int32(f))
 		case Float:
 			return math.Float32frombits(uint32(f))
 		case String:

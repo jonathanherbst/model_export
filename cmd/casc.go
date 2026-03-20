@@ -10,6 +10,7 @@ import (
 	"io"
 	"jph/model-export/pkg/blizzard"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -183,6 +184,76 @@ func init() {
 	})
 
 	register(Command{
+		Name: "getrecord",
+		Help: "getrecord <table_name> <id> `print the record with the specified id`",
+		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
+			if len(args) != 2 {
+				fmt.Fprintf(os.Stderr, "usage: getrecord <table_name> <id>")
+				return nil
+			}
+
+			table_name := args[0]
+			id, err := strconv.ParseUint(args[1], 10, 32)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "usage: getrecord <table_name> <id>")
+				return nil
+			}
+
+			switch db := extra.(type) {
+			case *blizzard.WOWCasc:
+				table, err := db.GetTable(table_name)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "unable to fetch table: %s", table_name)
+					return nil
+				}
+
+				record := table.GetFixedRecordById(uint32(id))
+				if record != nil {
+					printRecord(*record)
+				}
+			default:
+				fmt.Println("unsupported casc product")
+			}
+			return nil
+		},
+	})
+
+	register(Command{
+		Name: "getrecordsbyfk",
+		Help: "getrecordsbyfk <table_name> <fk_id> `print the records with the specified foreign key id`",
+		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
+			if len(args) != 2 {
+				fmt.Fprintf(os.Stderr, "usage: getrecordsbyfk <table_name> <fk_id>")
+				return nil
+			}
+
+			table_name := args[0]
+			id, err := strconv.ParseUint(args[1], 10, 32)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "usage: getrecordsbyfk <table_name> <fk_id>")
+				return nil
+			}
+
+			switch db := extra.(type) {
+			case *blizzard.WOWCasc:
+				table, err := db.GetTable(table_name)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "unable to fetch table: %s", table_name)
+					return nil
+				}
+
+				for record := range func(yield func(blizzard.DBDRecord) bool) { table.GetFixedRecordsByForeignKey(uint32(id), yield) } {
+					printRecord(record)
+					fmt.Println()
+				}
+			default:
+				fmt.Println("unsupported casc product")
+			}
+			return nil
+		},
+	})
+
+	register(Command{
 		Name: "help",
 		Help: "list available commands",
 		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
@@ -208,6 +279,56 @@ func init() {
 			return ErrExit
 		},
 	})
+}
+
+func printRecord(record blizzard.DBDRecord) {
+	for i, column := range record.Schema.Columns {
+		fmt.Printf("%s", column.Name)
+		if column.ForeignKey != nil {
+			fmt.Printf(" <%s>", *column.ForeignKey)
+		}
+		fmt.Printf(": ")
+		var field interface{}
+		if i == record.Schema.IDIndex {
+			field = uint64(record.GetID())
+		} else {
+			fieldIndex := i
+			if i > record.Schema.IDIndex {
+				fieldIndex--
+			}
+			field = record.GetField(fieldIndex)
+		}
+		switch f := field.(type) {
+		case uint64:
+			fmt.Printf("%d\n", f)
+		case int64:
+			fmt.Printf("%d\n", f)
+		case string:
+			fmt.Printf("\"%s\"\n", f)
+		case float32:
+			fmt.Printf("%f\n", f)
+		case []uint64:
+			fmt.Printf("[%d", f[0])
+			for _, v := range f[1:] {
+				fmt.Printf(",%d", v)
+			}
+			fmt.Printf("]\n")
+		case []int64:
+			fmt.Printf("[%d", f[0])
+			for _, v := range f[1:] {
+				fmt.Printf(",%d", v)
+			}
+			fmt.Printf("]\n")
+		case []float32:
+			fmt.Printf("[%f", f[0])
+			for _, v := range f[1:] {
+				fmt.Printf(",%f", v)
+			}
+			fmt.Printf("]\n")
+		default:
+			panic("unhandled field type")
+		}
+	}
 }
 
 func selectHandler(args []string, casc *blizzard.Casc, extra interface{}) error {
