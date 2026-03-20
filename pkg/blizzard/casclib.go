@@ -114,7 +114,7 @@ func (data FileData) Open(zeroEncrypted bool) (*CascFile, error) {
 
 type CascFile struct {
 	handle casclib_sys.File
-	name   string
+	Name   string
 }
 
 func (file CascFile) Close() error {

@@ -132,6 +132,39 @@ func init() {
 	})
 
 	register(Command{
+		Name: "xid",
+		Help: "xid <id> <extract_path> `Extract a file by id from the casc`",
+		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
+			f, err := os.Create(args[1])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to open extract file: %v\n", err)
+				os.Exit(1)
+			}
+			defer f.Close()
+
+			id, err := strconv.ParseUint(args[0], 10, 32)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "usage: fileinfo <id>")
+				return nil
+			}
+
+			casc_f, err := casc.OpenFileById(uint32(id), true)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to open casc file: %v\n", err)
+				os.Exit(2)
+			}
+			defer casc_f.Close()
+
+			len, err := io.Copy(f, casc_f)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%d bytes written to %s\n", len, args[1])
+			return nil
+		},
+	})
+
+	register(Command{
 		Name: "tables",
 		Help: "tables [<match>] `list tables available in the casc (wow only)`",
 		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
@@ -173,6 +206,30 @@ func init() {
 			default:
 				fmt.Println("unsupported casc product")
 			}
+			return nil
+		},
+	})
+
+	register(Command{
+		Name: "fileinfo",
+		Help: "fileinfo <id> `print information the specified file`",
+		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
+			if len(args) != 1 {
+				fmt.Fprintf(os.Stderr, "usage: fileinfo <id>")
+				return nil
+			}
+			id, err := strconv.ParseUint(args[0], 10, 32)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "usage: fileinfo <id>")
+				return nil
+			}
+
+			file, err := casc.OpenFileById(uint32(id), true)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "file not found")
+				return nil
+			}
+			fmt.Printf("Name: %s\n", file.Name)
 			return nil
 		},
 	})
