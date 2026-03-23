@@ -33,6 +33,8 @@ func M2SkinFromBuf(buf []byte) (*M2Skin, error) {
 	var skin M2Skin
 	vertices := header.Verticies.MakeArray(buf, 0)
 	indices := header.Indicies.MakeArray(buf, 0)
+	fmt.Printf("idx: %v\n", vertices[:10])
+	fmt.Printf("idx: %v\n", indices[:10])
 	skin.Meshes = make([]M2Mesh, header.Submeshes.Size)
 	for i, submesh := range header.Submeshes.MakeArray(buf, 0) {
 		skin.Meshes[i].Id = submesh.SkinSectionId

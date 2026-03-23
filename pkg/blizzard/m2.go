@@ -12,12 +12,15 @@ func M2FromFile(path string) (*M2, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed reading M2: %w", err)
 	}
+	defer f.Close()
+
 	return M2FromReader(f)
 }
 
 func M2FromReader(r io.Reader) (*M2, error) {
 	var m2 M2
 	m2r := M2Reader{r}
+	nSkins := 0
 	for header, data := range m2r.Chunks {
 		switch string(header.Token[:]) {
 		case "MD21":
@@ -26,13 +29,19 @@ func M2FromReader(r io.Reader) (*M2, error) {
 				return nil, fmt.Errorf("Failed reading M2: %w", err)
 			}
 			m2.Vertices = md20.Verticies()
+			nSkins = int(md20.MD20Header.NumSkinProfiles)
+		case "SFID":
+			m2.SkinFileIds = make([]uint32, nSkins)
+			binary.Decode(data, binary.LittleEndian, m2.SkinFileIds)
+			// the rest is lod file ids (smaller meshes when rendering farther away?)
 		}
 	}
 	return &m2, nil
 }
 
 type M2 struct {
-	Vertices []M2Vertex
+	Vertices    []M2Vertex
+	SkinFileIds []uint32
 }
 
 func M2MD20FromChunk(header m2ChunkHeader, data []byte) (*M2MD20, error) {
@@ -62,11 +71,7 @@ type M2MD20 struct {
 }
 
 func (md20 M2MD20) Verticies() []M2Vertex {
-	return md20.MD20Header.Vertices.MakeArray(md20)
-}
-
-func (md20 M2MD20) offset(arrayOffset uint32) int {
-	return int(arrayOffset) - 8
+	return md20.MD20Header.Vertices.MakeArray(md20.data, -8)
 }
 
 type M2Reader struct {
@@ -165,8 +170,8 @@ type m2Array[T any] struct {
 	Size, Offset uint32
 }
 
-func (arr m2Array[T]) MakeArray(md20 M2MD20) []T {
-	data := md20.data[md20.offset(arr.Offset):]
+func (arr m2Array[T]) MakeArray(buf []byte, adj int) []T {
+	data := buf[int(arr.Offset)+adj:]
 	output := make([]T, arr.Size)
 	size, err := binary.Decode(data, binary.LittleEndian, output)
 	if err != nil {
