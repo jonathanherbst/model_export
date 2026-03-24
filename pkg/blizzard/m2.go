@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"os"
 )
 
@@ -71,7 +72,12 @@ type M2MD20 struct {
 }
 
 func (md20 M2MD20) Verticies() []M2Vertex {
-	return md20.MD20Header.Vertices.MakeArray(md20.data, -8)
+	vertices := md20.MD20Header.Vertices.MakeArray(md20.data, -8)
+	for _, v := range vertices {
+		// blizzard doesn't normalize its normals :)
+		v.Normal.Normalize()
+	}
+	return vertices
 }
 
 type M2Reader struct {
@@ -158,6 +164,16 @@ type C3Vector struct {
 	X, Y, Z float32
 }
 
+func (vec *C3Vector) Normalize() {
+	magnitude := math.Sqrt(float64(vec.X*vec.X + vec.Y*vec.Y + vec.Z*vec.Z))
+	if magnitude == 0 || math.IsNaN(magnitude) || math.IsInf(magnitude, 0) {
+		panic("unable to normalize vector")
+	}
+	vec.X = vec.X / float32(magnitude)
+	vec.Y = vec.Y / float32(magnitude)
+	vec.Z = vec.Z / float32(magnitude)
+}
+
 type C2Vector struct {
 	X, Y float32
 }
@@ -203,8 +219,7 @@ type M2Vertex struct {
 	BoneWeights [4]uint8
 	BoneIndices [4]uint8
 	Normal      C3Vector
-	TexCoords   C2Vector
-	// Placeholder
+	TexCoords   [2]C2Vector
 }
 
 type M2Color struct {

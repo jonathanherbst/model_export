@@ -31,30 +31,27 @@ func M2SkinFromBuf(buf []byte) (*M2Skin, error) {
 	}
 
 	var skin M2Skin
-	vertices := header.Verticies.MakeArray(buf, 0)
-	indices := header.Indicies.MakeArray(buf, 0)
-	fmt.Printf("idx: %v\n", vertices[:10])
-	fmt.Printf("idx: %v\n", indices[:10])
+	skin.VertexIdxes = header.Verticies.MakeArray(buf, 0)
+	skin.TriangleIndxes = header.Indicies.MakeArray(buf, 0)
 	skin.Meshes = make([]M2Mesh, header.Submeshes.Size)
 	for i, submesh := range header.Submeshes.MakeArray(buf, 0) {
 		skin.Meshes[i].Id = submesh.SkinSectionId
-		skin.Meshes[i].VertexIndexes = make([]uint32, submesh.IndexCount)
-		for j := 0; j < int(submesh.IndexCount); j++ {
-			index := int(submesh.Level)<<16 | int(submesh.IndexStart)
-			skin.Meshes[i].VertexIndexes[j] = uint32(vertices[indices[index+j]])
-		}
+		index := (int(submesh.Level) << 16) | int(submesh.IndexStart)
+		skin.Meshes[i].LocalVertexIdxes = skin.TriangleIndxes[index : index+int(submesh.IndexCount)]
 	}
 
 	return &skin, nil
 }
 
 type M2Skin struct {
-	Meshes []M2Mesh
+	VertexIdxes    []uint16
+	TriangleIndxes []uint16
+	Meshes         []M2Mesh
 }
 
 type M2Mesh struct {
-	Id            uint16 //
-	VertexIndexes []uint32
+	Id               uint16
+	LocalVertexIdxes []uint16
 }
 
 type M2SkinHeader struct {
