@@ -67,6 +67,7 @@ var m2Cmd = &cobra.Command{
 
 			fmt.Printf("M2 file has %d vertices\n", len(m2.Vertices))
 			fmt.Printf("Skin file ids: %v\n", m2.SkinFileIds)
+			fmt.Printf("Skel file ids: %v\n", m2.SkelFileIDs)
 			for _, vertex := range m2.Vertices[:10] {
 				fmt.Printf("\t%v\n", vertex)
 			}

@@ -35,6 +35,9 @@ func M2FromReader(r io.Reader) (*M2, error) {
 			m2.SkinFileIds = make([]uint32, nSkins)
 			binary.Decode(data, binary.LittleEndian, m2.SkinFileIds)
 			// the rest is lod file ids (smaller meshes when rendering farther away?)
+		case "SKID":
+			m2.SkelFileIDs = make([]uint32, len(data)/4)
+			binary.Decode(data, binary.LittleEndian, m2.SkelFileIDs)
 		}
 	}
 	return &m2, nil
@@ -43,6 +46,7 @@ func M2FromReader(r io.Reader) (*M2, error) {
 type M2 struct {
 	Vertices    []M2Vertex
 	SkinFileIds []uint32
+	SkelFileIDs []uint32
 }
 
 func M2MD20FromChunk(header m2ChunkHeader, data []byte) (*M2MD20, error) {
@@ -78,6 +82,10 @@ func (md20 M2MD20) Verticies() []M2Vertex {
 		v.Normal.Normalize()
 	}
 	return vertices
+}
+
+func (md20 M2MD20) Bones() []M2CompBone {
+	return md20.MD20Header.Bones.MakeArray(md20.data, -8)
 }
 
 type M2Reader struct {
@@ -187,6 +195,10 @@ type m2Array[T any] struct {
 }
 
 func (arr m2Array[T]) MakeArray(buf []byte, adj int) []T {
+	if arr.Size == 0 {
+		return nil
+	}
+
 	data := buf[int(arr.Offset)+adj:]
 	output := make([]T, arr.Size)
 	size, err := binary.Decode(data, binary.LittleEndian, output)
