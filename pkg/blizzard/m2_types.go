@@ -1,0 +1,226 @@
+package blizzard
+
+import (
+	"encoding/binary"
+	"math"
+)
+
+type m2Array[T any] struct {
+	Size, Offset uint32
+}
+
+func (arr m2Array[T]) Load(buf []byte, adj int) []T {
+	if arr.Size == 0 {
+		return nil
+	}
+
+	data := buf[int(arr.Offset)+adj:]
+	output := make([]T, arr.Size)
+	size, err := binary.Decode(data, binary.LittleEndian, output)
+	if err != nil {
+		return nil
+	}
+
+	var t T
+	if binary.Size(&t)*int(arr.Size) != size {
+		panic("didn't get the entire array")
+	}
+
+	return output
+}
+
+type m2LoadedBone struct {
+	KeyBoneId   int32
+	Flags       m2CompBoneFlag
+	ParentBone  int16  // Parent bone ID or -1 if there is none.
+	SubmeshId   uint16 // Mesh part ID OR uDistToParent?
+	BoneNameCRC uint32 // or CompressData, these are for debugging only. their bone names match those in key bone
+	Translation m2LoadedTrack[C3Vector]
+	Rotation    m2LoadedTrack[M2CompQuat]
+	Scale       m2LoadedTrack[C3Vector]
+	Pivot       C3Vector
+}
+
+type m2CompBone struct {
+	KeyBoneId   int32 // Back-reference to the key bone lookup table. -1 if this is no key bone.
+	Flags       m2CompBoneFlag
+	ParentBone  int16  // Parent bone ID or -1 if there is none.
+	SubmeshId   uint16 // Mesh part ID OR uDistToParent?
+	BoneNameCRC uint32 // or CompressData, these are for debugging only. their bone names match those in key bone
+	Translation m2Track[C3Vector]
+	Rotation    m2Track[M2CompQuat]
+	Scale       m2Track[C3Vector]
+	Pivot       C3Vector
+}
+
+func (bone m2CompBone) Load(buf []byte, adj int) m2LoadedBone {
+	translation := bone.Translation.Load(buf, adj)
+	rotation := bone.Rotation.Load(buf, adj)
+	scale := bone.Scale.Load(buf, adj)
+
+	return m2LoadedBone{
+		bone.KeyBoneId,
+		bone.Flags,
+		bone.ParentBone,
+		bone.SubmeshId,
+		bone.BoneNameCRC,
+		translation,
+		rotation,
+		scale,
+		bone.Pivot,
+	}
+}
+
+type m2CompBoneFlag uint32
+
+const (
+	ignoreParentTranslate        m2CompBoneFlag = 0x1
+	ignoreParentScale            m2CompBoneFlag = 0x2
+	ignoreParentRotation         m2CompBoneFlag = 0x4
+	spherical_billboard          m2CompBoneFlag = 0x8
+	cylindrical_billboard_lock_x m2CompBoneFlag = 0x10
+	cylindrical_billboard_lock_y m2CompBoneFlag = 0x20
+	cylindrical_billboard_lock_z m2CompBoneFlag = 0x40
+	transformed                  m2CompBoneFlag = 0x200
+	kinematic_bone               m2CompBoneFlag = 0x400  // MoP+: allow physics to influence this bone
+	helmet_anim_scaled           m2CompBoneFlag = 0x1000 // set blend_modificator to helmetAnimScalingRec.m_amount for this bone
+	something_sequence_id        m2CompBoneFlag = 0x2000 // <=bfa+, parent_bone+submesh_id are a sequence id instead?!
+)
+
+type m2LoadedTrack[T any] struct {
+	InterpolationType uint16
+	GlobalSequence    uint16
+	Timestamps        [][]uint32
+	Values            [][]T
+}
+
+type m2TrackBase struct {
+	InterpolationType uint16
+	GlobalSequence    uint16
+	Timestamps        m2Array[m2Array[uint32]]
+}
+
+type m2Track[T any] struct {
+	Base   m2TrackBase
+	Values m2Array[m2Array[T]]
+}
+
+func (track m2Track[T]) Load(buf []byte, adj int) m2LoadedTrack[T] {
+	timestamps := make([][]uint32, track.Base.Timestamps.Size)
+	for i, ts := range track.Base.Timestamps.Load(buf, adj) {
+		timestamps[i] = ts.Load(buf, adj)
+	}
+	values := make([][]T, track.Values.Size)
+	for i, v := range track.Values.Load(buf, adj) {
+		values[i] = v.Load(buf, adj)
+	}
+
+	return m2LoadedTrack[T]{track.Base.InterpolationType, track.Base.GlobalSequence, timestamps, values}
+}
+
+type C3Vector struct {
+	X, Y, Z float32
+}
+
+func (vec *C3Vector) Normalize() {
+	magnitude := math.Sqrt(float64(vec.X*vec.X + vec.Y*vec.Y + vec.Z*vec.Z))
+	if magnitude == 0 || math.IsNaN(magnitude) || math.IsInf(magnitude, 0) {
+		panic("unable to normalize vector")
+	}
+	vec.X = vec.X / float32(magnitude)
+	vec.Y = vec.Y / float32(magnitude)
+	vec.Z = vec.Z / float32(magnitude)
+}
+
+type C2Vector struct {
+	X, Y float32
+}
+
+type M2CompQuat struct {
+	X, Y, Z, W int16
+}
+
+func (quat M2CompQuat) Decompress() M2F32Quat {
+	decompress := func(v int16) float32 {
+		if quat.X < 0 {
+			return float32(int(v)+32768) / 32767.0
+		} else {
+			return float32(int(v)-32767) / 32767.0
+		}
+	}
+
+	return M2F32Quat{
+		decompress(quat.X),
+		decompress(quat.Y),
+		decompress(quat.Z),
+		decompress(quat.W),
+	}
+}
+
+type M2F32Quat struct {
+	X, Y, Z, W float32
+}
+
+type CAaBox struct {
+	Min, Max C3Vector
+}
+
+type M2Loop struct {
+	Timestamp uint32
+}
+
+type M2Sequence struct {
+	// Placeholder - define fields as needed
+}
+
+type M2Vertex struct {
+	Pos         C3Vector
+	BoneWeights [4]uint8
+	BoneIndices [4]uint8
+	Normal      C3Vector
+	TexCoords   [2]C2Vector
+}
+
+type M2Color struct {
+	// Placeholder
+}
+
+type M2Texture struct {
+	// Placeholder
+}
+
+type M2TextureWeight struct {
+	// Placeholder
+}
+
+type M2TextureTransform struct {
+	// Placeholder
+}
+
+type M2Material struct {
+	// Placeholder
+}
+
+type M2Attachment struct {
+	// Placeholder
+}
+
+type M2Event struct {
+	// Placeholder
+}
+
+type M2Light struct {
+	// Placeholder
+}
+
+type M2Camera struct {
+	// Placeholder
+}
+
+type M2Ribbon struct {
+	// Placeholder
+}
+
+type M2Particle struct {
+	// Placeholder
+}

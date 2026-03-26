@@ -34,15 +34,32 @@ var m2Cmd = &cobra.Command{
 		if err != nil {
 			panic("no skin flag")
 		}
+		skel_path, err := cmd.Flags().GetString("skel")
+		if err != nil {
+			panic("no skel flag")
+		}
 		gltf_path, err := cmd.Flags().GetString("gltf")
 		if err != nil {
 			panic("no gltf flag")
 		}
 
 		if chunks {
-			m2Reader := blizzard.M2Reader{Reader: m2File}
+			m2Reader := blizzard.M2ChunkReader{Reader: m2File}
 			for header, data := range m2Reader.Chunks {
 				fmt.Printf("Chunk %s - %d bytes\n", string(header.Token[:]), len(data))
+			}
+			if skel_path != "" {
+				skelFile, err := os.Open(skel_path)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to open skel file: %v\n", err)
+					os.Exit(1)
+				}
+
+				fmt.Printf("Skel file: %s\n", skel_path)
+				skelReader := blizzard.M2ChunkReader{Reader: skelFile}
+				for header, data := range skelReader.Chunks {
+					fmt.Printf("Chunk %s - %d bytes\n", string(header.Token[:]), len(data))
+				}
 			}
 		} else {
 			m2, err := blizzard.M2FromReader(m2File)
@@ -55,19 +72,28 @@ var m2Cmd = &cobra.Command{
 			if skin_path != "" {
 				skin, err = blizzard.M2SkinFromFile(skin_path)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to parse m2 file: %v\n", err)
+					fmt.Fprintf(os.Stderr, "failed to parse skin file: %v\n", err)
+					os.Exit(1)
+				}
+			}
+
+			var skel *blizzard.M2Skeleton
+			if skel_path != "" {
+				skel, err = blizzard.M2SkelFromFile(skel_path)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to parse skel file: %v\n", err)
 					os.Exit(1)
 				}
 			}
 
 			if gltf_path != "" {
-				export_gltf(m2, skin, gltf_path)
+				export_gltf(m2, skin, skel, gltf_path)
 				return
 			}
 
 			fmt.Printf("M2 file has %d vertices\n", len(m2.Vertices))
 			fmt.Printf("Skin file ids: %v\n", m2.SkinFileIds)
-			fmt.Printf("Skel file ids: %v\n", m2.SkelFileIDs)
+			fmt.Printf("Skel file ids: %v\n", m2.SkelFileIds)
 			for _, vertex := range m2.Vertices[:10] {
 				fmt.Printf("\t%v\n", vertex)
 			}
@@ -75,6 +101,20 @@ var m2Cmd = &cobra.Command{
 				fmt.Printf("Skin: %d meshes\n", len(skin.Meshes))
 				for _, submesh := range skin.Meshes {
 					fmt.Printf("\tid: %d, %d verticies\n", submesh.Id, len(submesh.LocalVertexIdxes))
+				}
+			}
+			if skel != nil {
+				fmt.Printf("Skel: %s, %d bones", skel.Name, len(skel.Bones))
+				if skel.ParentSkelFileId != nil {
+					fmt.Printf(", parent %d\n", *skel.ParentSkelFileId)
+				} else {
+					fmt.Println()
+				}
+				fmt.Printf("\tAnims: %v\n", skel.AnimMeta)
+				fmt.Printf("\tBoneFiles: %v\n", skel.BoneFileIds)
+				fmt.Println("Bones:")
+				for _, bone := range skel.Bones {
+					fmt.Printf("\tid: %d, parent: %d, flags: %08X, pivot: %v\n", bone.KeyBoneId, bone.ParentBone, bone.Flags, bone.Pivot)
 				}
 			}
 		}
@@ -86,23 +126,30 @@ func init() {
 	m2Cmd.Flags().Bool("chunks", false, "Print out the chunks types and sizes from m2 file")
 	m2Cmd.Flags().String("gltf", "", "Export the m2 file to a gltf")
 	m2Cmd.Flags().String("skin", "", "Skin file containing the geosets of the m2 file")
+	m2Cmd.Flags().String("skel", "", "Skel file containing the bone structure and animations for the bones")
 }
 
-func export_gltf(m2 *blizzard.M2, skin *blizzard.M2Skin, gltf_path string) {
+func export_gltf(m2 *blizzard.M2, skin *blizzard.M2Skin, skel *blizzard.M2Skeleton, gltf_path string) {
 	doc := gltf.NewDocument()
 
 	if skin != nil {
 		// skin uses a subset of vertices from the m2 vertex list
 		positions := make([][3]float32, len(skin.VertexIdxes))
 		normals := make([][3]float32, len(skin.VertexIdxes))
+		joints := make([][4]uint8, len(skin.VertexIdxes))
+		weights := make([][4]uint8, len(skin.VertexIdxes))
 		for i, vi := range skin.VertexIdxes {
 			v := m2.Vertices[vi]
 			positions[i] = [3]float32{v.Pos.X, v.Pos.Z, -v.Pos.Y}
 			normals[i] = [3]float32{v.Normal.X, v.Normal.Z, -v.Normal.Y}
+			joints[i] = v.BoneIndices
+			weights[i] = v.BoneWeights
 		}
 		attrs, _ := modeler.WritePrimitiveAttributes(doc,
 			modeler.PrimitiveAttribute{Name: gltf.POSITION, Data: positions},
 			modeler.PrimitiveAttribute{Name: gltf.NORMAL, Data: normals},
+			modeler.PrimitiveAttribute{Name: gltf.JOINTS_0, Data: joints},
+			modeler.PrimitiveAttribute{Name: gltf.WEIGHTS_0, Data: weights},
 		)
 
 		renderMeshes := skin.Meshes
@@ -126,8 +173,65 @@ func export_gltf(m2 *blizzard.M2, skin *blizzard.M2Skin, gltf_path string) {
 			}
 			doc.Nodes[i] = &gltf.Node{Name: fmt.Sprintf("Model%d", submesh.Id), Mesh: new(i)}
 			doc.Scenes[0].Nodes[i] = i
-			doc.Scene = new(0)
 		}
+
+		if skel != nil {
+			skeletonNode := &gltf.Node{
+				Name:     "Skeleton",
+				Children: make([]int, 0),
+			}
+			skeletonNodeId := len(doc.Nodes)
+			doc.Nodes = append(doc.Nodes, skeletonNode)
+
+			inverseBindMatrices := make([][4][4]float32, len(skel.Bones))
+			joints := make([]int, len(skel.Bones))
+			boneLookup := make(map[int32]int)
+			for i, bone := range skel.Bones {
+				joints[i] = len(doc.Nodes)
+				if _, ok := boneLookup[bone.KeyBoneId]; ok {
+					panic("two bones have the same key id")
+				}
+				if bone.KeyBoneId >= 0 {
+					boneLookup[bone.KeyBoneId] = len(doc.Nodes)
+				}
+
+				translation := [3]float64{float64(bone.Pivot.X), float64(bone.Pivot.Z), float64(-bone.Pivot.Y)}
+				inverseBindMatrices[i] = [4][4]float32{
+					{1, 0, 0, bone.Pivot.X},
+					{0, 1, 0, bone.Pivot.Z},
+					{0, 0, 1, -bone.Pivot.Y},
+					{0, 0, 0, 1},
+				}
+
+				if bone.ParentBone == -1 {
+					skeletonNode.Children = append(skeletonNode.Children, joints[i])
+				} else {
+					parentNode := doc.Nodes[joints[bone.ParentBone]]
+					parentBone := skel.Bones[bone.ParentBone]
+					translation[0] -= float64(parentBone.Pivot.X)
+					translation[1] -= float64(parentBone.Pivot.Z)
+					translation[2] += float64(parentBone.Pivot.Y)
+					parentNode.Children = append(parentNode.Children, joints[i])
+				}
+
+				fmt.Printf("translation: %v\n", translation)
+				doc.Nodes = append(doc.Nodes, &gltf.Node{
+					Name:        fmt.Sprintf("Bone%d", i),
+					Translation: translation,
+					Children:    make([]int, 0),
+				})
+			}
+
+			ibmAcc := modeler.WriteAccessor(doc, gltf.TargetArrayBuffer, inverseBindMatrices)
+			doc.Skins = []*gltf.Skin{{
+				Name:                "Skeleton",
+				Joints:              joints,
+				InverseBindMatrices: &ibmAcc,
+				Skeleton:            &skeletonNodeId,
+			}}
+		}
+
+		doc.Scene = new(0)
 	} else {
 		positions := make([][3]float32, len(m2.Vertices))
 		normals := make([][3]float32, len(m2.Vertices))

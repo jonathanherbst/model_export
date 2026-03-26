@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"math"
 	"os"
 )
 
@@ -20,7 +19,7 @@ func M2FromFile(path string) (*M2, error) {
 
 func M2FromReader(r io.Reader) (*M2, error) {
 	var m2 M2
-	m2r := M2Reader{r}
+	m2r := M2ChunkReader{r}
 	nSkins := 0
 	for header, data := range m2r.Chunks {
 		switch string(header.Token[:]) {
@@ -36,8 +35,8 @@ func M2FromReader(r io.Reader) (*M2, error) {
 			binary.Decode(data, binary.LittleEndian, m2.SkinFileIds)
 			// the rest is lod file ids (smaller meshes when rendering farther away?)
 		case "SKID":
-			m2.SkelFileIDs = make([]uint32, len(data)/4)
-			binary.Decode(data, binary.LittleEndian, m2.SkelFileIDs)
+			m2.SkelFileIds = make([]uint32, len(data)/4)
+			binary.Decode(data, binary.LittleEndian, m2.SkelFileIds)
 		}
 	}
 	return &m2, nil
@@ -46,7 +45,7 @@ func M2FromReader(r io.Reader) (*M2, error) {
 type M2 struct {
 	Vertices    []M2Vertex
 	SkinFileIds []uint32
-	SkelFileIDs []uint32
+	SkelFileIds []uint32
 }
 
 func M2MD20FromChunk(header m2ChunkHeader, data []byte) (*M2MD20, error) {
@@ -76,7 +75,7 @@ type M2MD20 struct {
 }
 
 func (md20 M2MD20) Verticies() []M2Vertex {
-	vertices := md20.MD20Header.Vertices.MakeArray(md20.data, -8)
+	vertices := md20.MD20Header.Vertices.Load(md20.data, -8)
 	for _, v := range vertices {
 		// blizzard doesn't normalize its normals :)
 		v.Normal.Normalize()
@@ -84,49 +83,8 @@ func (md20 M2MD20) Verticies() []M2Vertex {
 	return vertices
 }
 
-func (md20 M2MD20) Bones() []M2CompBone {
-	return md20.MD20Header.Bones.MakeArray(md20.data, -8)
-}
-
-type M2Reader struct {
-	Reader io.Reader
-}
-
-func (r M2Reader) Chunks(yield func(m2ChunkHeader, []byte) bool) {
-	var header m2ChunkHeader
-	if err := binary.Read(r.Reader, binary.LittleEndian, &header); err != nil {
-		return
-	}
-
-	// if the first header token is "MD20" the file is not chunked and instead has MD20 data.
-	if string(header.Token[:]) == "MD20" {
-		data, err := io.ReadAll(r.Reader)
-		if err != nil {
-			return
-		}
-		yield(header, data)
-		return
-	}
-
-	for {
-		data, err := io.ReadAll(io.LimitReader(r.Reader, int64(header.SizeOrVersion)))
-		if err != nil {
-			return
-		}
-
-		if !yield(header, data) {
-			return
-		}
-
-		if err = binary.Read(r.Reader, binary.LittleEndian, &header); err != nil {
-			return
-		}
-	}
-}
-
-type m2ChunkHeader struct {
-	Token         [4]byte
-	SizeOrVersion uint32
+func (md20 M2MD20) Bones() []m2CompBone {
+	return md20.MD20Header.Bones.Load(md20.data, -8)
 }
 
 type m2MD20Header struct {
@@ -135,7 +93,7 @@ type m2MD20Header struct {
 	GlobalLoops            m2Array[M2Loop]
 	Sequences              m2Array[M2Sequence]
 	SequenceIdxHashById    m2Array[uint16]
-	Bones                  m2Array[M2CompBone]
+	Bones                  m2Array[m2CompBone]
 	BoneIndicesById        m2Array[uint16]
 	Vertices               m2Array[M2Vertex]
 	NumSkinProfiles        uint32
@@ -166,114 +124,4 @@ type m2MD20Header struct {
 	RibbonEmitters         m2Array[M2Ribbon]
 	ParticleEmitters       m2Array[M2Particle]
 	// Optional: TextureCombinerCombos M2Array[uint16] // if flag_use_texture_combiner_combos
-}
-
-type C3Vector struct {
-	X, Y, Z float32
-}
-
-func (vec *C3Vector) Normalize() {
-	magnitude := math.Sqrt(float64(vec.X*vec.X + vec.Y*vec.Y + vec.Z*vec.Z))
-	if magnitude == 0 || math.IsNaN(magnitude) || math.IsInf(magnitude, 0) {
-		panic("unable to normalize vector")
-	}
-	vec.X = vec.X / float32(magnitude)
-	vec.Y = vec.Y / float32(magnitude)
-	vec.Z = vec.Z / float32(magnitude)
-}
-
-type C2Vector struct {
-	X, Y float32
-}
-
-type CAaBox struct {
-	Min, Max C3Vector
-}
-
-type m2Array[T any] struct {
-	Size, Offset uint32
-}
-
-func (arr m2Array[T]) MakeArray(buf []byte, adj int) []T {
-	if arr.Size == 0 {
-		return nil
-	}
-
-	data := buf[int(arr.Offset)+adj:]
-	output := make([]T, arr.Size)
-	size, err := binary.Decode(data, binary.LittleEndian, output)
-	if err != nil {
-		return nil
-	}
-
-	var t T
-	if binary.Size(&t)*int(arr.Size) != size {
-		panic("didn't get the entire array")
-	}
-
-	return output
-}
-
-type M2Loop struct {
-	Timestamp uint32
-}
-
-type M2Sequence struct {
-	// Placeholder - define fields as needed
-}
-
-type M2CompBone struct {
-	// Placeholder
-}
-
-type M2Vertex struct {
-	Pos         C3Vector
-	BoneWeights [4]uint8
-	BoneIndices [4]uint8
-	Normal      C3Vector
-	TexCoords   [2]C2Vector
-}
-
-type M2Color struct {
-	// Placeholder
-}
-
-type M2Texture struct {
-	// Placeholder
-}
-
-type M2TextureWeight struct {
-	// Placeholder
-}
-
-type M2TextureTransform struct {
-	// Placeholder
-}
-
-type M2Material struct {
-	// Placeholder
-}
-
-type M2Attachment struct {
-	// Placeholder
-}
-
-type M2Event struct {
-	// Placeholder
-}
-
-type M2Light struct {
-	// Placeholder
-}
-
-type M2Camera struct {
-	// Placeholder
-}
-
-type M2Ribbon struct {
-	// Placeholder
-}
-
-type M2Particle struct {
-	// Placeholder
 }

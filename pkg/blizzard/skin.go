@@ -31,10 +31,10 @@ func M2SkinFromBuf(buf []byte) (*M2Skin, error) {
 	}
 
 	var skin M2Skin
-	skin.VertexIdxes = header.Verticies.MakeArray(buf, 0)
-	skin.TriangleIndxes = header.Indicies.MakeArray(buf, 0)
+	skin.VertexIdxes = header.Verticies.Load(buf, 0)
+	skin.TriangleIndxes = header.Indicies.Load(buf, 0)
 	skin.Meshes = make([]M2Mesh, header.Submeshes.Size)
-	for i, submesh := range header.Submeshes.MakeArray(buf, 0) {
+	for i, submesh := range header.Submeshes.Load(buf, 0) {
 		skin.Meshes[i].Id = submesh.SkinSectionId
 		index := (int(submesh.Level) << 16) | int(submesh.IndexStart)
 		skin.Meshes[i].LocalVertexIdxes = skin.TriangleIndxes[index : index+int(submesh.IndexCount)]
