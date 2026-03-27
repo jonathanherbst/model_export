@@ -132,6 +132,14 @@ func (vec *C3Vector) Normalize() {
 	vec.Z = vec.Z / float32(magnitude)
 }
 
+func (vec C3Vector) IntoYUp() C3Vector {
+	return C3Vector{vec.X, vec.Z, -vec.Y}
+}
+
+func (vec C3Vector) IntoArray() [3]float32 {
+	return [3]float32{vec.X, vec.Y, vec.Z}
+}
+
 type C2Vector struct {
 	X, Y float32
 }
@@ -170,7 +178,29 @@ type M2Loop struct {
 }
 
 type M2Sequence struct {
-	// Placeholder - define fields as needed
+	ID             uint16   // Animation id in AnimationData.dbc
+	VariationIndex uint16   // Sub-animation id: Which number in a row of animations this one is.
+	Duration       uint32   // The length of this animation sequence in milliseconds. (BC+: was start_timestamp in vanilla/BC)
+	Movespeed      float32  // This is the speed the character moves with in this animation.
+	Flags          uint32   // See animation flags below.
+	Frequency      int16    // This is used to determine how often the animation is played. For all animations of the same type, this adds up to 0x7FFF (32767).
+	Padding        uint16   // Padding/unused
+	Replay         M2Range  // May both be 0 to not repeat. Client will pick a random number of repetitions within bounds if given.
+	BlendTimeIn    uint16   // The client blends (lerp) animation states between animations where the end and start values differ. This specifies how long that blending takes. Values: 0, 50, 100, 150, 200, 250, 300, 350, 500.
+	BlendTimeOut   uint16   // The client blends between this sequence and the next sequence for blendTimeOut milliseconds.
+	Bounds         M2Bounds // Bounding volume for this sequence
+	VariationNext  int16    // id of the following animation of this AnimationID, points to an Index or is -1 if none.
+	AliasNext      uint16   // id in the list of animations. Used to find actual animation if this sequence is an alias (flags & 0x40)
+}
+
+type M2Range struct {
+	Minimum uint32
+	Maximum uint32
+}
+
+type M2Bounds struct {
+	Extent C3Vector
+	Radius float32
 }
 
 type M2Vertex struct {

@@ -10,6 +10,8 @@ import (
 type M2Skeleton struct {
 	Name             string
 	Bones            []m2LoadedBone
+	Sequences        []M2Sequence
+	SequenceIds      []uint16
 	ParentSkelFileId *uint32
 	AnimMeta         []m2AFIDData
 	BoneFileIds      []m2BFIDData
@@ -45,6 +47,13 @@ func M2SkelFromReader(r io.Reader) (*M2Skeleton, error) {
 			for i, bone := range bones {
 				skel.Bones[i] = bone.Load(data, 0)
 			}
+		case "SKS1":
+			var header m2SKS1Header
+			if _, err := binary.Decode(data, binary.LittleEndian, &header); err != nil {
+				return nil, fmt.Errorf("failed to decode SKS1: %w", err)
+			}
+			skel.Sequences = header.Sequences.Load(data, 0)
+			skel.SequenceIds = header.SequenceLookup.Load(data, 0)
 		case "SKPD":
 			var header m2SKPDHeader
 			if _, err := binary.Decode(data, binary.LittleEndian, &header); err != nil {

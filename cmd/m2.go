@@ -91,7 +91,7 @@ var m2Cmd = &cobra.Command{
 				return
 			}
 
-			fmt.Printf("M2 file has %d vertices\n", len(m2.Vertices))
+			fmt.Printf("M2 file has %d vertices, %d bones, %d sequences\n", len(m2.Vertices), len(m2.Bones), len(m2.Sequences))
 			fmt.Printf("Skin file ids: %v\n", m2.SkinFileIds)
 			fmt.Printf("Skel file ids: %v\n", m2.SkelFileIds)
 			for _, vertex := range m2.Vertices[:10] {
@@ -104,12 +104,27 @@ var m2Cmd = &cobra.Command{
 				}
 			}
 			if skel != nil {
-				fmt.Printf("Skel: %s, %d bones", skel.Name, len(skel.Bones))
+				fmt.Printf("Skel: %s, %d bones, %d sequences", skel.Name, len(skel.Bones), len(skel.Sequences))
 				if skel.ParentSkelFileId != nil {
 					fmt.Printf(", parent %d\n", *skel.ParentSkelFileId)
 				} else {
 					fmt.Println()
 				}
+				fmt.Printf("\tSeq Ids: %v\n", skel.SequenceIds)
+				fmt.Printf("\tSeq Ids: [")
+				has808 := false
+				for i, seq := range skel.Sequences {
+					if seq.ID == 808 {
+						has808 = true
+					}
+					if i == 0 {
+						fmt.Printf("%d", seq.ID)
+					} else {
+						fmt.Printf(" %d", seq.ID)
+					}
+				}
+				fmt.Println("]")
+				fmt.Printf("\tHas Seq 808: %v\n", has808)
 				fmt.Printf("\tAnims: %v\n", skel.AnimMeta)
 				fmt.Printf("\tBoneFiles: %v\n", skel.BoneFileIds)
 				fmt.Println("Bones:")
@@ -154,8 +169,18 @@ func export_gltf(m2 *blizzard.M2, skin *blizzard.M2Skin, skel *blizzard.M2Skelet
 
 		renderMeshes := skin.Meshes
 		doc.Meshes = make([]*gltf.Mesh, len(renderMeshes))
-		doc.Nodes = make([]*gltf.Node, len(renderMeshes))
-		doc.Scenes[0].Nodes = make([]int, len(renderMeshes))
+		doc.Nodes = make([]*gltf.Node, len(renderMeshes)+1)
+		doc.Scenes[0].Nodes = make([]int, 0)
+		modelNode := gltf.Node{
+			Name:     "Model",
+			Children: make([]int, len(renderMeshes)),
+		}
+		doc.Nodes[0] = &modelNode
+		doc.Scenes[0].Nodes = append(doc.Scenes[0].Nodes, 0)
+
+		// build the meshes
+		doc.Meshes = make([]*gltf.Mesh, len(renderMeshes))
+		meshNodes := doc.Nodes[1:]
 		for i, submesh := range renderMeshes {
 			for _, idx := range submesh.LocalVertexIdxes {
 				if idx >= uint16(len(skin.VertexIdxes)) {
@@ -171,17 +196,20 @@ func export_gltf(m2 *blizzard.M2, skin *blizzard.M2Skin, skel *blizzard.M2Skelet
 					Attributes: attrs,
 				}},
 			}
-			doc.Nodes[i] = &gltf.Node{Name: fmt.Sprintf("Model%d", submesh.Id), Mesh: new(i)}
-			doc.Scenes[0].Nodes[i] = i
+			nodeIdx := i + 1
+			doc.Nodes[nodeIdx] = &gltf.Node{Name: fmt.Sprintf("Mesh%d", submesh.Id), Mesh: new(i)}
+			modelNode.Children[i] = nodeIdx
 		}
 
 		if skel != nil {
+			// build the skeleton
 			skeletonNode := &gltf.Node{
 				Name:     "Skeleton",
 				Children: make([]int, 0),
 			}
 			skeletonNodeId := len(doc.Nodes)
 			doc.Nodes = append(doc.Nodes, skeletonNode)
+			doc.Scenes[0].Nodes = append(doc.Scenes[0].Nodes, skeletonNodeId)
 
 			inverseBindMatrices := make([][4][4]float32, len(skel.Bones))
 			joints := make([]int, len(skel.Bones))
@@ -197,9 +225,9 @@ func export_gltf(m2 *blizzard.M2, skin *blizzard.M2Skin, skel *blizzard.M2Skelet
 
 				translation := [3]float64{float64(bone.Pivot.X), float64(bone.Pivot.Z), float64(-bone.Pivot.Y)}
 				inverseBindMatrices[i] = [4][4]float32{
-					{1, 0, 0, bone.Pivot.X},
-					{0, 1, 0, bone.Pivot.Z},
-					{0, 0, 1, -bone.Pivot.Y},
+					{1, 0, 0, -bone.Pivot.X},
+					{0, 1, 0, -bone.Pivot.Z},
+					{0, 0, 1, bone.Pivot.Y},
 					{0, 0, 0, 1},
 				}
 
@@ -214,7 +242,6 @@ func export_gltf(m2 *blizzard.M2, skin *blizzard.M2Skin, skel *blizzard.M2Skelet
 					parentNode.Children = append(parentNode.Children, joints[i])
 				}
 
-				fmt.Printf("translation: %v\n", translation)
 				doc.Nodes = append(doc.Nodes, &gltf.Node{
 					Name:        fmt.Sprintf("Bone%d", i),
 					Translation: translation,
@@ -229,10 +256,13 @@ func export_gltf(m2 *blizzard.M2, skin *blizzard.M2Skin, skel *blizzard.M2Skelet
 				InverseBindMatrices: &ibmAcc,
 				Skeleton:            &skeletonNodeId,
 			}}
+			for _, mesh := range meshNodes {
+				mesh.Skin = new(0)
+			}
 		}
-
 		doc.Scene = new(0)
 	} else {
+		// write the vertices as points if there's no skin
 		positions := make([][3]float32, len(m2.Vertices))
 		normals := make([][3]float32, len(m2.Vertices))
 		for i, v := range m2.Vertices {
