@@ -87,15 +87,24 @@ const (
 	something_sequence_id        m2CompBoneFlag = 0x2000 // <=bfa+, parent_bone+submesh_id are a sequence id instead?!
 )
 
+type Interpolation uint16
+
+const (
+	InterpolationStep         Interpolation = 0
+	InterpolationLinear       Interpolation = 1
+	InterpolationCubicBezier  Interpolation = 2
+	InterpolationCubicHermite Interpolation = 3
+)
+
 type m2LoadedTrack[T any] struct {
-	InterpolationType uint16
+	InterpolationType Interpolation
 	GlobalSequence    uint16
 	Timestamps        [][]uint32
 	Values            [][]T
 }
 
 type m2TrackBase struct {
-	InterpolationType uint16
+	InterpolationType Interpolation
 	GlobalSequence    uint16
 	Timestamps        m2Array[m2Array[uint32]]
 }
@@ -150,7 +159,7 @@ type M2CompQuat struct {
 
 func (quat M2CompQuat) Decompress() M2F32Quat {
 	decompress := func(v int16) float32 {
-		if quat.X < 0 {
+		if v < 0 {
 			return float32(int(v)+32768) / 32767.0
 		} else {
 			return float32(int(v)-32767) / 32767.0
@@ -167,6 +176,14 @@ func (quat M2CompQuat) Decompress() M2F32Quat {
 
 type M2F32Quat struct {
 	X, Y, Z, W float32
+}
+
+func (quat M2F32Quat) IntoYUp() M2F32Quat {
+	return M2F32Quat{quat.X, quat.Z, -quat.Y, quat.W}
+}
+
+func (quat M2F32Quat) IntoArray() [4]float32 {
+	return [4]float32{quat.X, quat.Y, quat.Z, quat.W}
 }
 
 type CAaBox struct {

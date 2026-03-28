@@ -33,7 +33,14 @@ directionalLight.position.set(5, 10, 7.5);
 scene.add(directionalLight);
 
 const loader = new GLTFLoader();
+const animationSelect = document.getElementById('animationSelect');
+const animationLabel = document.getElementById('animationLabel');
+
+const clock = new THREE.Clock();
 let currentModel = null;
+let mixer = null;
+let activeAction = null;
+let currentAnimations = [];
 let activeBlobUrl = null;
 
 function showError(message) {
@@ -50,7 +57,14 @@ function showLoading(message) {
 }
 
 function clearModel() {
+  if (mixer) {
+    mixer.stopAllAction();
+    mixer = null;
+    activeAction = null;
+  }
+
   if (!currentModel) return;
+
   scene.remove(currentModel);
   currentModel.traverse((child) => {
     if (child.isMesh) {
@@ -98,6 +112,26 @@ function isSupportedExtension(url) {
   return low.endsWith('.glb') || low.endsWith('.gltf');
 }
 
+function setAnimationOptions(animations) {
+  animationSelect.innerHTML = '';
+
+  if (!animations || animations.length === 0) {
+    animationLabel.hidden = true;
+    return;
+  }
+
+  animationLabel.hidden = false;
+
+  animations.forEach((clip, index) => {
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = clip.name || `Animation ${index + 1}`;
+    animationSelect.appendChild(option);
+  });
+
+  animationSelect.value = '0';
+}
+
 function loadModel(url) {
   showError('');
   showLoading('Loading ...');
@@ -127,6 +161,18 @@ function loadModel(url) {
 
       currentModel = gltf.scene;
       scene.add(currentModel);
+
+      if (gltf.animations && gltf.animations.length > 0) {
+        currentAnimations = gltf.animations;
+        mixer = new THREE.AnimationMixer(currentModel);
+        setAnimationOptions(gltf.animations);
+
+        activeAction = mixer.clipAction(currentAnimations[0]);
+        activeAction.reset().play();
+      } else {
+        currentAnimations = [];
+        setAnimationOptions([]);
+      }
 
       focusModel(currentModel);
       showLoading('');
@@ -169,6 +215,23 @@ fileInput.addEventListener('change', async (event) => {
   loadModel(activeBlobUrl);
 });
 
+animationSelect.addEventListener('change', () => {
+  if (!mixer || !currentAnimations.length) return;
+
+  const idx = Number(animationSelect.value);
+  if (Number.isNaN(idx) || idx < 0 || idx >= currentAnimations.length) return;
+
+  if (activeAction) {
+    activeAction.stop();
+  }
+
+  const clip = currentAnimations[idx];
+  if (!clip) return;
+
+  activeAction = mixer.clipAction(clip);
+  activeAction.reset().play();
+});
+
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -178,6 +241,12 @@ window.addEventListener('resize', () => {
 
 function animate() {
   requestAnimationFrame(animate);
+
+  const delta = clock.getDelta();
+  if (mixer) {
+    mixer.update(delta);
+  }
+
   controls.update();
   renderer.render(scene, camera);
 }

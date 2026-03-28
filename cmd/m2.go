@@ -202,6 +202,15 @@ func export_gltf(m2 *blizzard.M2, skin *blizzard.M2Skin, skel *blizzard.M2Skelet
 		}
 
 		if skel != nil {
+			doc.Animations = make([]*gltf.Animation, len(skel.Sequences))
+			for i, seq := range skel.Sequences {
+				doc.Animations[i] = &gltf.Animation{
+					Name:     fmt.Sprintf("%d_%d", seq.ID, seq.VariationIndex),
+					Channels: make([]*gltf.AnimationChannel, 0),
+					Samplers: make([]*gltf.AnimationSampler, 0),
+				}
+			}
+
 			// build the skeleton
 			skeletonNode := &gltf.Node{
 				Name:     "Skeleton",
@@ -213,14 +222,117 @@ func export_gltf(m2 *blizzard.M2, skin *blizzard.M2Skin, skel *blizzard.M2Skelet
 
 			inverseBindMatrices := make([][4][4]float32, len(skel.Bones))
 			joints := make([]int, len(skel.Bones))
-			boneLookup := make(map[int32]int)
 			for i, bone := range skel.Bones {
-				joints[i] = len(doc.Nodes)
-				if _, ok := boneLookup[bone.KeyBoneId]; ok {
-					panic("two bones have the same key id")
+				nodeIdx := len(doc.Nodes)
+				joints[i] = nodeIdx
+
+				// load the animation data
+				for animIdx, trans := range bone.Translation.Values {
+					interpolation := gltf.InterpolationLinear
+					switch bone.Translation.InterpolationType {
+					case blizzard.InterpolationStep:
+						interpolation = gltf.InterpolationStep
+					case blizzard.InterpolationLinear:
+						interpolation = gltf.InterpolationLinear
+					case blizzard.InterpolationCubicBezier:
+						fallthrough
+					case blizzard.InterpolationCubicHermite:
+						interpolation = gltf.InterpolationCubicSpline
+					}
+
+					if len(trans) > 0 {
+						translation := make([][3]float32, len(trans))
+						for i, v := range trans {
+							translation[i] = v.IntoYUp().IntoArray()
+						}
+						timeAcc := modeler.WriteAccessor(doc, gltf.TargetArrayBuffer, bone.Translation.Timestamps[animIdx])
+						transAcc := modeler.WriteAccessor(doc, gltf.TargetArrayBuffer, translation)
+						samplerIdx := len(doc.Animations[animIdx].Samplers)
+						doc.Animations[animIdx].Samplers = append(doc.Animations[animIdx].Samplers, &gltf.AnimationSampler{
+							Input:         timeAcc,
+							Output:        transAcc,
+							Interpolation: interpolation,
+						})
+						doc.Animations[animIdx].Channels = append(doc.Animations[animIdx].Channels, &gltf.AnimationChannel{
+							Sampler: samplerIdx,
+							Target: gltf.AnimationChannelTarget{
+								Node: new(nodeIdx),
+								Path: gltf.TRSTranslation,
+							},
+						})
+					}
 				}
-				if bone.KeyBoneId >= 0 {
-					boneLookup[bone.KeyBoneId] = len(doc.Nodes)
+
+				for animIdx, rot := range bone.Rotation.Values {
+					interpolation := gltf.InterpolationLinear
+					switch bone.Rotation.InterpolationType {
+					case blizzard.InterpolationStep:
+						interpolation = gltf.InterpolationStep
+					case blizzard.InterpolationLinear:
+						interpolation = gltf.InterpolationLinear
+					case blizzard.InterpolationCubicBezier:
+						fallthrough
+					case blizzard.InterpolationCubicHermite:
+						interpolation = gltf.InterpolationCubicSpline
+					}
+
+					if len(rot) > 0 {
+						rotation := make([][4]float32, len(rot))
+						for i, q := range rot {
+							rotation[i] = q.Decompress().IntoYUp().IntoArray()
+						}
+						timeAcc := modeler.WriteAccessor(doc, gltf.TargetArrayBuffer, bone.Rotation.Timestamps[animIdx])
+						transAcc := modeler.WriteAccessor(doc, gltf.TargetArrayBuffer, rotation)
+						samplerIdx := len(doc.Animations[animIdx].Samplers)
+						doc.Animations[animIdx].Samplers = append(doc.Animations[animIdx].Samplers, &gltf.AnimationSampler{
+							Input:         timeAcc,
+							Output:        transAcc,
+							Interpolation: interpolation,
+						})
+						doc.Animations[animIdx].Channels = append(doc.Animations[animIdx].Channels, &gltf.AnimationChannel{
+							Sampler: samplerIdx,
+							Target: gltf.AnimationChannelTarget{
+								Node: new(nodeIdx),
+								Path: gltf.TRSRotation,
+							},
+						})
+					}
+				}
+
+				for animIdx, scale := range bone.Scale.Values {
+					interpolation := gltf.InterpolationLinear
+					switch bone.Scale.InterpolationType {
+					case blizzard.InterpolationStep:
+						interpolation = gltf.InterpolationStep
+					case blizzard.InterpolationLinear:
+						interpolation = gltf.InterpolationLinear
+					case blizzard.InterpolationCubicBezier:
+						fallthrough
+					case blizzard.InterpolationCubicHermite:
+						interpolation = gltf.InterpolationCubicSpline
+					}
+
+					if len(scale) > 0 {
+						rotation := make([][3]float32, len(scale))
+						for i, v := range scale {
+							rotation[i] = v.IntoYUp().IntoArray()
+						}
+						timeAcc := modeler.WriteAccessor(doc, gltf.TargetArrayBuffer, bone.Scale.Timestamps[animIdx])
+						transAcc := modeler.WriteAccessor(doc, gltf.TargetArrayBuffer, rotation)
+						samplerIdx := len(doc.Animations[animIdx].Samplers)
+						doc.Animations[animIdx].Samplers = append(doc.Animations[animIdx].Samplers, &gltf.AnimationSampler{
+							Input:         timeAcc,
+							Output:        transAcc,
+							Interpolation: interpolation,
+						})
+						doc.Animations[animIdx].Channels = append(doc.Animations[animIdx].Channels, &gltf.AnimationChannel{
+							Sampler: samplerIdx,
+							Target: gltf.AnimationChannelTarget{
+								Node: new(nodeIdx),
+								Path: gltf.TRSScale,
+							},
+						})
+					}
 				}
 
 				translation := [3]float64{float64(bone.Pivot.X), float64(bone.Pivot.Z), float64(-bone.Pivot.Y)}
@@ -242,10 +354,30 @@ func export_gltf(m2 *blizzard.M2, skin *blizzard.M2Skin, skel *blizzard.M2Skelet
 					parentNode.Children = append(parentNode.Children, joints[i])
 				}
 
+				// if len(bone.Translation.Values) > 0 && len(bone.Translation.Values[0]) > 0 {
+				// 	q := bone.Translation.Values[0][0].IntoYUp()
+				// 	translation = [3]float64{float64(q.X), float64(q.Y), float64(q.Z)}
+				// }
+
+				// rotation := [4]float64{0, 0, 0, 1}
+				// if len(bone.Rotation.Values) > 0 && len(bone.Rotation.Values[0]) > 0 {
+				// 	q := bone.Rotation.Values[0][0].Decompress().IntoYUp()
+				// 	rotation = [4]float64{float64(q.X), float64(q.Y), float64(q.Z), float64(q.W)}
+				// }
+
+				// scale := [3]float64{0, 0, 0}
+				// if len(bone.Scale.Values) > 0 && len(bone.Scale.Values[0]) > 0 {
+				// 	q := bone.Scale.Values[0][0].IntoYUp()
+				// 	scale = [3]float64{float64(q.X), float64(q.Y), float64(q.Z)}
+				// }
+
+				//fmt.Printf("rotation: %v\n", rotation)
 				doc.Nodes = append(doc.Nodes, &gltf.Node{
 					Name:        fmt.Sprintf("Bone%d", i),
 					Translation: translation,
-					Children:    make([]int, 0),
+					Rotation:    [4]float64{0, 0, 0, 1},
+					// Scale:       scale,
+					Children: make([]int, 0),
 				})
 			}
 
