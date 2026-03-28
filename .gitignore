@@ -21,3 +21,8 @@ dbd
 
 # go build artifacts
 model-export
+
+# viewer
+viewer/node_modules
+viewer/dist
+viewer/.parcel-cache

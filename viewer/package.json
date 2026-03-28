@@ -1,0 +1,14 @@
+{
+  "name": "model-viewer",
+  "source": "src/index.html",
+  "scripts": {
+    "start": "parcel --open",
+    "build": "parcel build"
+  },
+  "devDependencies": {
+    "parcel": "^2.16.4"
+  },
+  "dependencies": {
+    "three": "^0.183.2"
+  }
+}
