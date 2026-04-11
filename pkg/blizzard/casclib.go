@@ -128,7 +128,7 @@ func (file CascFile) Close() error {
 func (file CascFile) Read(buffer []byte) (int, error) {
 	len, err := casclib_sys.ReadFile(file.handle, buffer)
 	if err != nil {
-		return 0, fmt.Errorf("faile reading a file: %w", err)
+		return 0, fmt.Errorf("failed reading a file: %w", err)
 	}
 	if len == 0 {
 		return 0, io.EOF

@@ -245,7 +245,7 @@ type M2Range struct {
 }
 
 type M2Bounds struct {
-	Extent C3Vector
+	Extent CAaBox
 	Radius float32
 }
 

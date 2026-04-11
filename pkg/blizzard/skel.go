@@ -75,7 +75,7 @@ type M2Skeleton struct {
 	Name             string
 	Bones            []m2LoadedBone
 	Sequences        []M2Sequence
-	SequenceIds      []uint16
+	SequenceIds      []int16
 	ParentSkelFileId *uint32
 	AnimMeta         []m2AFIDData
 	BoneFileIds      []m2BFIDData

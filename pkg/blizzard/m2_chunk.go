@@ -65,7 +65,7 @@ type m2SKL1Header struct {
 type m2SKS1Header struct {
 	GlobalLoops    m2Array[M2Loop]
 	Sequences      m2Array[M2Sequence]
-	SequenceLookup m2Array[uint16]
+	SequenceLookup m2Array[int16]
 	Padding        [8]byte
 }
 
