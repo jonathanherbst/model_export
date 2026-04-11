@@ -3,9 +3,11 @@ module jph/model-export
 go 1.26.1
 
 require (
+	github.com/go-gl/mathgl v1.2.0
 	github.com/google/go-github/v84 v84.0.0
-	github.com/spf13/cobra v1.10.2
 	github.com/qmuntal/gltf v0.28.0
+	github.com/spf13/cobra v1.10.2
+	gonum.org/v1/gonum v0.17.0
 )
 
 require (

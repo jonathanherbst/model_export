@@ -6,6 +6,7 @@ package cmd
 import (
 	"fmt"
 	"jph/model-export/pkg/blizzard"
+	"jph/model-export/pkg/model"
 	"os"
 
 	"github.com/qmuntal/gltf"
@@ -87,7 +88,7 @@ var m2Cmd = &cobra.Command{
 			}
 
 			if gltf_path != "" {
-				export_gltf(m2, skin, skel, gltf_path)
+				exportGLTF(m2, skin, skel, gltf_path)
 				return
 			}
 
@@ -142,6 +143,20 @@ func init() {
 	m2Cmd.Flags().String("gltf", "", "Export the m2 file to a gltf")
 	m2Cmd.Flags().String("skin", "", "Skin file containing the geosets of the m2 file")
 	m2Cmd.Flags().String("skel", "", "Skel file containing the bone structure and animations for the bones")
+}
+
+func exportGLTF(m2 *blizzard.M2, skin *blizzard.M2Skin, skel *blizzard.M2Skeleton, gltf_path string) {
+	// fill up a model with the blizzard parameters
+	var mdl model.Model
+	m2.FillModel(&mdl)
+	skin.FillModel(&mdl)
+	skel.FillModel(&mdl)
+
+	// export the model
+	if err := model.ExportGLTF(mdl, gltf_path); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to save gltf: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func export_gltf(m2 *blizzard.M2, skin *blizzard.M2Skin, skel *blizzard.M2Skeleton, gltf_path string) {

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"jph/model-export/pkg/model"
 	"os"
 )
 
@@ -47,6 +48,20 @@ type M2Skin struct {
 	VertexIdxes    []uint16
 	TriangleIndxes []uint16
 	Meshes         []M2Mesh
+}
+
+func (skin M2Skin) FillModel(mdl *model.Model) {
+	mdl.Skin = &model.Skin{
+		Meshes: make([]model.Mesh, len(skin.Meshes)),
+	}
+	for i, mesh := range skin.Meshes {
+		mdl.Skin.Meshes[i].Name = fmt.Sprintf("%d", mesh.Id)
+		mdl.Skin.Meshes[i].RenderProcess = model.RenderTriangles
+		mdl.Skin.Meshes[i].VertexMap = make([]int, len(mesh.LocalVertexIdxes))
+		for mapIdx, vertexIdx := range mesh.LocalVertexIdxes {
+			mdl.Skin.Meshes[i].VertexMap[mapIdx] = int(skin.VertexIdxes[vertexIdx])
+		}
+	}
 }
 
 type M2Mesh struct {

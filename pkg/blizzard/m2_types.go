@@ -2,7 +2,10 @@ package blizzard
 
 import (
 	"encoding/binary"
+	"jph/model-export/pkg/model"
 	"math"
+
+	"github.com/go-gl/mathgl/mgl32"
 )
 
 type m2Array[T any] struct {
@@ -96,6 +99,20 @@ const (
 	InterpolationCubicHermite Interpolation = 3
 )
 
+func (interp Interpolation) IntoModel() model.InterpolationType {
+	switch interp {
+	case InterpolationStep:
+		return model.InterpolationStep
+	case InterpolationLinear:
+		return model.InterpolationLinear
+	case InterpolationCubicBezier:
+		return model.InterpolationCubicBezier
+	case InterpolationCubicHermite:
+		return model.InterpolationCubicHermite
+	}
+	return model.InterpolationStep
+}
+
 type m2LoadedTrack[T any] struct {
 	InterpolationType Interpolation
 	GlobalSequence    uint16
@@ -149,6 +166,10 @@ func (vec C3Vector) IntoArray() [3]float32 {
 	return [3]float32{vec.X, vec.Y, vec.Z}
 }
 
+func (vec C3Vector) IntoMGL32() mgl32.Vec3 {
+	return vec.IntoArray()
+}
+
 type C2Vector struct {
 	X, Y float32
 }
@@ -165,13 +186,17 @@ func (quat M2CompQuat) Decompress() M2F32Quat {
 			return float32(int(v)-32767) / 32767.0
 		}
 	}
-
-	return M2F32Quat{
+	q := M2F32Quat{
 		decompress(quat.X),
 		decompress(quat.Y),
 		decompress(quat.Z),
 		decompress(quat.W),
 	}
+
+	if q.X == 0.0 && q.Y == 0.0 && q.Z == 0.0 && q.W == 0.0 {
+		return M2F32Quat{0.0, 0.0, 0.0, 1.0}
+	}
+	return q
 }
 
 type M2F32Quat struct {
@@ -184,6 +209,10 @@ func (quat M2F32Quat) IntoYUp() M2F32Quat {
 
 func (quat M2F32Quat) IntoArray() [4]float32 {
 	return [4]float32{quat.X, quat.Y, quat.Z, quat.W}
+}
+
+func (quat M2F32Quat) IntoMGL32() mgl32.Vec4 {
+	return mgl32.Vec4{quat.X, quat.Y, quat.Z, quat.W}
 }
 
 type CAaBox struct {

@@ -4,7 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"jph/model-export/pkg/model"
 	"os"
+
+	"github.com/go-gl/mathgl/mgl32"
 )
 
 func M2FromFile(path string) (*M2, error) {
@@ -54,6 +57,22 @@ type M2 struct {
 	Sequences   []M2Sequence
 	SkinFileIds []uint32
 	SkelFileIds []uint32
+}
+
+func (m2 M2) FillModel(mdl *model.Model) {
+	if len(m2.Vertices) > 0 {
+		mdl.VertexPositions = make([]mgl32.Vec3, len(m2.Vertices))
+		mdl.VertexNormals = make([]mgl32.Vec3, len(m2.Vertices))
+		mdl.VertexBones = make([][4]uint8, len(m2.Vertices))
+		mdl.VertexBoneWeights = make([][4]uint8, len(m2.Vertices))
+
+		for i, v := range m2.Vertices {
+			mdl.VertexPositions[i] = v.Pos.IntoMGL32()
+			mdl.VertexNormals[i] = v.Normal.IntoMGL32().Normalize()
+			mdl.VertexBones[i] = v.BoneIndices
+			mdl.VertexBoneWeights[i] = v.BoneWeights // maybe need to normalize these?
+		}
+	}
 }
 
 func M2MD20FromChunk(header m2ChunkHeader, data []byte) (*M2MD20, error) {
