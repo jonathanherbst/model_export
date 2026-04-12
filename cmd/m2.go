@@ -113,10 +113,10 @@ var m2Cmd = &cobra.Command{
 				}
 				fmt.Printf("\tSeq Ids: %v\n", skel.SequenceIds)
 				fmt.Printf("\tSeq Ids: [")
-				has808 := false
+				var first808Idx *int = nil
 				for i, seq := range skel.Sequences {
-					if seq.ID == 808 {
-						has808 = true
+					if seq.ID == 0 && first808Idx == nil {
+						first808Idx = &i
 					}
 					if i == 0 {
 						fmt.Printf("%d", seq.ID)
@@ -125,12 +125,16 @@ var m2Cmd = &cobra.Command{
 					}
 				}
 				fmt.Println("]")
-				fmt.Printf("\tHas Seq 808: %v\n", has808)
+				fmt.Printf("\tHas Seq 808: %d\n", first808Idx)
 				fmt.Printf("\tAnims: %v\n", skel.AnimMeta)
 				fmt.Printf("\tBoneFiles: %v\n", skel.BoneFileIds)
 				fmt.Println("Bones:")
 				for _, bone := range skel.Bones {
-					fmt.Printf("\tid: %d, parent: %d, flags: %08X, pivot: %v\n", bone.KeyBoneId, bone.ParentBone, bone.Flags, bone.Pivot)
+					animLen := 0
+					if first808Idx != nil && len(bone.Rotation.Timestamps) > *first808Idx {
+						animLen = len(bone.Rotation.Timestamps[*first808Idx])
+					}
+					fmt.Printf("\tid: %d, 808 rot: %d\n", bone.KeyBoneId, animLen)
 				}
 			}
 		}

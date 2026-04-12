@@ -61,6 +61,7 @@ func ExportGLTF(mdl Model, path string) error {
 	if mdl.Skeleton != nil {
 		skelNodeIdx := len(doc.Nodes)
 		doc.Nodes = append(doc.Nodes, &gltf.Node{Name: "Skeleton", Children: make([]int, 0)})
+		doc.Scenes[0].Nodes = append(doc.Scenes[0].Nodes, skelNodeIdx)
 
 		// setup the bone structure and load the inverse bind matrices
 		boneBaseNodeIdx := len(doc.Nodes)
@@ -68,11 +69,17 @@ func ExportGLTF(mdl Model, path string) error {
 		inverseBindMatrices := make([][4][4]float32, len(mdl.Skeleton.BoneInvBindMatrices))
 		for i, m := range mdl.Skeleton.BoneInvBindMatrices {
 			boneIdx := len(doc.Nodes)
+			t := m.Inv().Col(3).Vec3()
 			doc.Nodes = append(doc.Nodes, &gltf.Node{Name: fmt.Sprintf("Bone%d", i), Children: make([]int, 0)})
 			if mdl.Skeleton.BoneParents[i] > 0 {
-				parentIdx := boneBaseNodeIdx + mdl.Skeleton.BoneParents[i]
+				parentBoneIdx := mdl.Skeleton.BoneParents[i]
+				parentIdx := boneBaseNodeIdx + parentBoneIdx
+				parentBindTranslation := mdl.Skeleton.BoneInvBindMatrices[parentBoneIdx].Inv().Col(3).Vec3()
+				t = t.Sub(parentBindTranslation)
+				doc.Nodes[boneIdx].Translation = [3]float64{float64(t[0]), float64(t[1]), float64(t[2])}
 				doc.Nodes[parentIdx].Children = append(doc.Nodes[parentIdx].Children, boneIdx)
 			} else {
+				doc.Nodes[boneIdx].Translation = [3]float64{float64(t[0]), float64(t[1]), float64(t[2])}
 				doc.Nodes[skelNodeIdx].Children = append(doc.Nodes[skelNodeIdx].Children, boneIdx)
 			}
 
