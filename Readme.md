@@ -2,10 +2,17 @@
 
 Export game models to a commonly readable format.
 
-Updating casclib
+```
+git clone --recursive https://github.com/jonathanherbst/model_export.git
+go generate ./...
+go run .
+```
 
-``` sh
-zig fetch --save git+https://github.com/jonathanherbst/CascLib.git#zig
+How to run the viewer, available at localhost:1234
+
+```
+cd viewer
+npm run start
 ```
 
 ## Resources

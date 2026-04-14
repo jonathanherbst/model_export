@@ -1,6 +1,6 @@
 module jph/model-export
 
-go 1.26.1
+go 1.26.0
 
 require (
 	github.com/go-gl/mathgl v1.2.0

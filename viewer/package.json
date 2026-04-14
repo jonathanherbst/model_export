@@ -2,7 +2,7 @@
   "name": "model-viewer",
   "source": "src/index.html",
   "scripts": {
-    "start": "parcel --open",
+    "start": "parcel",
     "build": "parcel build"
   },
   "devDependencies": {
