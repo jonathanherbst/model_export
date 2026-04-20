@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 
+	"github.com/go-gl/mathgl/mgl32"
 	"github.com/qmuntal/gltf"
 	"github.com/qmuntal/gltf/modeler"
 )
@@ -58,13 +59,14 @@ func ExportGLTF(mdl Model, path string) error {
 		return fmt.Errorf("failed writing primitive accessors: %w", err)
 	}
 
+	var boneBaseNodeIdx *int = nil
 	if mdl.Skeleton != nil {
 		skelNodeIdx := len(doc.Nodes)
 		doc.Nodes = append(doc.Nodes, &gltf.Node{Name: "Skeleton", Children: make([]int, 0)})
 		doc.Scenes[0].Nodes = append(doc.Scenes[0].Nodes, skelNodeIdx)
 
 		// setup the bone structure and load the inverse bind matrices
-		boneBaseNodeIdx := len(doc.Nodes)
+		boneBaseNodeIdx = new(len(doc.Nodes))
 		joints := make([]int, len(mdl.Skeleton.BoneInvBindMatrices))
 		inverseBindMatrices := make([][4][4]float32, len(mdl.Skeleton.BoneInvBindMatrices))
 		for i, m := range mdl.Skeleton.BoneInvBindMatrices {
@@ -73,7 +75,7 @@ func ExportGLTF(mdl Model, path string) error {
 			doc.Nodes = append(doc.Nodes, &gltf.Node{Name: fmt.Sprintf("Bone%d", i), Children: make([]int, 0)})
 			if mdl.Skeleton.BoneParents[i] > 0 {
 				parentBoneIdx := mdl.Skeleton.BoneParents[i]
-				parentIdx := boneBaseNodeIdx + parentBoneIdx
+				parentIdx := *boneBaseNodeIdx + parentBoneIdx
 				parentBindTranslation := mdl.Skeleton.BoneInvBindMatrices[parentBoneIdx].Inv().Col(3).Vec3()
 				t = t.Sub(parentBindTranslation)
 				doc.Nodes[boneIdx].Translation = [3]float64{float64(t[0]), float64(t[1]), float64(t[2])}
@@ -144,5 +146,93 @@ func ExportGLTF(mdl Model, path string) error {
 		modelNode.Children = append(modelNode.Children, nodeIdx)
 	}
 
+	// animation export is not correct
+	doc.Animations = make([]*gltf.Animation, len(mdl.Animations))
+	for i, anim := range mdl.Animations {
+		doc.Animations[i] = &gltf.Animation{
+			Name:     anim.Name,
+			Channels: make([]*gltf.AnimationChannel, 0),
+			Samplers: make([]*gltf.AnimationSampler, 0),
+		}
+		addAnimationTracks(doc, doc.Animations[i], anim.TranslationTracks, *boneBaseNodeIdx, gltf.TRSTranslation)
+		addAnimationTracks(doc, doc.Animations[i], anim.RotationTracks, *boneBaseNodeIdx, gltf.TRSRotation)
+		addAnimationTracks(doc, doc.Animations[i], anim.ScaleTracks, *boneBaseNodeIdx, gltf.TRSScale)
+	}
+
 	return gltf.Save(doc, path)
+}
+
+func addAnimationTracks[T any](doc *gltf.Document, anim *gltf.Animation, tracks []AnimationTrack[T], boneBaseNodeIdx int, path gltf.TRSProperty) {
+	for _, track := range tracks {
+		if len(track.Timestamps) > 0 && (track.Interpolation == InterpolationLinear || track.Interpolation == InterpolationStep) {
+			timeAcc := modeler.WriteAccessor(doc, gltf.TargetArrayBuffer, track.Timestamps)
+			transAcc := writeAccessor(doc, gltf.TargetArrayBuffer, track.Values)
+			samplerIdx := len(anim.Samplers)
+			anim.Samplers = append(anim.Samplers, &gltf.AnimationSampler{
+				Interpolation: convertInterpolation(track.Interpolation),
+				Input:         timeAcc,
+				Output:        transAcc,
+			})
+			anim.Channels = append(anim.Channels, &gltf.AnimationChannel{
+				Sampler: samplerIdx,
+				Target: gltf.AnimationChannelTarget{
+					Node: new(boneBaseNodeIdx + track.Bone),
+					Path: path,
+				},
+			})
+		}
+	}
+}
+
+func writeAccessor(doc *gltf.Document, target gltf.Target, data any) int {
+	if vec3Data, ok := data.([]mgl32.Vec3); ok {
+		gltfData := make([][3]float32, len(vec3Data))
+		for i, v := range vec3Data {
+			gltfData[i] = mgl32Vec3ToGLTF(v)
+		}
+		return modeler.WriteAccessor(doc, target, gltfData)
+	}
+	if vec4Data, ok := data.([]mgl32.Vec4); ok {
+		gltfData := make([][4]float32, len(vec4Data))
+		for i, v := range vec4Data {
+			gltfData[i] = mgl32Vec4ToGLTF(v)
+		}
+		return modeler.WriteAccessor(doc, target, gltfData)
+	}
+	if mat4Data, ok := data.([]mgl32.Mat4); ok {
+		gltfData := make([][4][4]float32, len(mat4Data))
+		for i, m := range mat4Data {
+			gltfData[i] = mgl32Mat4ToGLTF(m)
+		}
+		return modeler.WriteAccessor(doc, target, gltfData)
+	}
+	return modeler.WriteAccessor(doc, target, data)
+}
+
+func mgl32Vec3ToGLTF(v mgl32.Vec3) [3]float32 {
+	return [3]float32{v.X(), v.Y(), v.Z()}
+}
+
+func mgl32Vec4ToGLTF(v mgl32.Vec4) [4]float32 {
+	return [4]float32{v.X(), v.Y(), v.Z(), v.W()}
+}
+
+func mgl32Mat4ToGLTF(m mgl32.Mat4) [4][4]float32 {
+	return [4][4]float32{
+		{m.At(0, 0), m.At(0, 1), m.At(0, 2), m.At(0, 3)},
+		{m.At(1, 0), m.At(1, 1), m.At(1, 2), m.At(1, 3)},
+		{m.At(2, 0), m.At(2, 1), m.At(2, 2), m.At(2, 3)},
+		{m.At(3, 0), m.At(3, 1), m.At(3, 2), m.At(3, 3)},
+	}
+}
+
+func convertInterpolation(interp InterpolationType) gltf.Interpolation {
+	switch interp {
+	case InterpolationStep:
+		return gltf.InterpolationStep
+	case InterpolationLinear:
+		return gltf.InterpolationLinear
+	default:
+		panic("unsupported interpolation")
+	}
 }
