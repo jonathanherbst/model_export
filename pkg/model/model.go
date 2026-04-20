@@ -38,6 +38,7 @@ type Skeleton struct {
 
 type Animation struct {
 	Name              string
+	Duration          float32
 	TranslationTracks []AnimationTrack[mgl32.Vec3]
 	RotationTracks    []AnimationTrack[mgl32.Vec4]
 	ScaleTracks       []AnimationTrack[mgl32.Vec3]

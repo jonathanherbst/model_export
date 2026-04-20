@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/qmuntal/gltf"
@@ -162,11 +163,31 @@ func ExportGLTF(mdl Model, path string) error {
 	return gltf.Save(doc, path)
 }
 
+type trackValue[T any] struct {
+	Time  float32
+	Value T
+}
+
 func addAnimationTracks[T any](doc *gltf.Document, anim *gltf.Animation, tracks []AnimationTrack[T], boneBaseNodeIdx int, path gltf.TRSProperty) {
 	for _, track := range tracks {
 		if len(track.Timestamps) > 0 && (track.Interpolation == InterpolationLinear || track.Interpolation == InterpolationStep) {
-			timeAcc := modeler.WriteAccessor(doc, gltf.TargetArrayBuffer, track.Timestamps)
-			transAcc := writeAccessor(doc, gltf.TargetArrayBuffer, track.Values)
+			trackData := make([]trackValue[T], len(track.Timestamps))
+			for i := range trackData {
+				trackData[i] = trackValue[T]{Time: track.Timestamps[i], Value: track.Values[i]}
+			}
+			sort.Slice(trackData, func(i, j int) bool {
+				return trackData[i].Time < trackData[j].Time
+			})
+
+			timestamps := make([]float32, len(trackData))
+			values := make([]T, len(trackData))
+			for i, track := range trackData {
+				timestamps[i] = track.Time
+				values[i] = track.Value
+			}
+
+			timeAcc := modeler.WriteAccessor(doc, gltf.TargetArrayBuffer, timestamps)
+			transAcc := writeAccessor(doc, gltf.TargetArrayBuffer, values)
 			samplerIdx := len(anim.Samplers)
 			anim.Samplers = append(anim.Samplers, &gltf.AnimationSampler{
 				Interpolation: convertInterpolation(track.Interpolation),

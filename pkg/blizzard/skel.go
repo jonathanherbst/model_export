@@ -86,6 +86,7 @@ func (skel M2Skeleton) FillModel(mdl *model.Model) {
 		mdl.Animations = make([]model.Animation, len(skel.Sequences))
 		for i, seq := range skel.Sequences {
 			mdl.Animations[i].Name = fmt.Sprintf("%d_%d", seq.ID, seq.VariationIndex)
+			mdl.Animations[i].Duration = float32(seq.Duration) / 1000.0
 			mdl.Animations[i].TranslationTracks = make([]model.AnimationTrack[mgl32.Vec3], 0)
 			mdl.Animations[i].RotationTracks = make([]model.AnimationTrack[mgl32.Vec4], 0)
 			mdl.Animations[i].ScaleTracks = make([]model.AnimationTrack[mgl32.Vec3], 0)
