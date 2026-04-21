@@ -111,7 +111,7 @@ func (skel M2Skeleton) FillModel(mdl *model.Model) {
 				track := model.AnimationTrack[mgl32.Vec3]{
 					Bone:          i,
 					Interpolation: bone.Translation.InterpolationType.IntoModel(),
-					Timestamps:    trackToSecs(ts),
+					Timestamps:    normalizeTimesatmps(ts, skel.Sequences[animIdx].Duration),
 					Values:        make([]mgl32.Vec3, len(ts)),
 				}
 				for trackIdx, v := range bone.Translation.Values[animIdx] {
@@ -123,8 +123,8 @@ func (skel M2Skeleton) FillModel(mdl *model.Model) {
 			for animIdx, ts := range bone.Rotation.Timestamps {
 				track := model.AnimationTrack[mgl32.Vec4]{
 					Bone:          i,
-					Interpolation: bone.Translation.InterpolationType.IntoModel(),
-					Timestamps:    trackToSecs(ts),
+					Interpolation: bone.Rotation.InterpolationType.IntoModel(),
+					Timestamps:    normalizeTimesatmps(ts, skel.Sequences[animIdx].Duration),
 					Values:        make([]mgl32.Vec4, len(ts)),
 				}
 				for trackIdx, v := range bone.Rotation.Values[animIdx] {
@@ -136,8 +136,8 @@ func (skel M2Skeleton) FillModel(mdl *model.Model) {
 			for animIdx, ts := range bone.Scale.Timestamps {
 				track := model.AnimationTrack[mgl32.Vec3]{
 					Bone:          i,
-					Interpolation: bone.Translation.InterpolationType.IntoModel(),
-					Timestamps:    trackToSecs(ts),
+					Interpolation: bone.Scale.InterpolationType.IntoModel(),
+					Timestamps:    normalizeTimesatmps(ts, skel.Sequences[animIdx].Duration),
 					Values:        make([]mgl32.Vec3, len(ts)),
 				}
 				for trackIdx, v := range bone.Scale.Values[animIdx] {
@@ -149,10 +149,18 @@ func (skel M2Skeleton) FillModel(mdl *model.Model) {
 	}
 }
 
-func trackToSecs(ms []uint32) []float32 {
+func normalizeTimesatmps(ms []uint32, duration uint32) []float32 {
 	ts := make([]float32, len(ms))
 	for i, v := range ms {
-		ts[i] = float32(v) / 1000.0
+		if duration > 0 {
+			norm_ms := v % duration
+			if norm_ms == 0 && v > 0 {
+				v = duration
+			} else {
+				v = norm_ms
+			}
+		}
+		ts[i] = float32(v) / 1000
 	}
 	return ts
 }
