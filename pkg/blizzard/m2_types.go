@@ -44,6 +44,10 @@ type m2LoadedBone struct {
 	Pivot       C3Vector
 }
 
+func (bone m2LoadedBone) GetName() string {
+	return LookupBoneName(bone.KeyBoneId, bone.BoneNameCRC)
+}
+
 type m2CompBone struct {
 	KeyBoneId   int32 // Back-reference to the key bone lookup table. -1 if this is no key bone.
 	Flags       m2CompBoneFlag

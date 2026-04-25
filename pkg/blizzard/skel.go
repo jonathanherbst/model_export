@@ -95,10 +95,12 @@ func (skel M2Skeleton) FillModel(mdl *model.Model) {
 
 	if len(skel.Bones) > 0 {
 		mdl.Skeleton = &model.Skeleton{
+			BoneNames:           make([]string, len(skel.Bones)),
 			BoneParents:         make([]int, len(skel.Bones)),
 			BoneInvBindMatrices: make([]mgl32.Mat4, len(skel.Bones)),
 		}
 		for i, bone := range skel.Bones {
+			mdl.Skeleton.BoneNames[i] = fmt.Sprintf("bone_%s (%d, 0x%08x)", bone.GetName(), bone.KeyBoneId, bone.BoneNameCRC)
 			mdl.Skeleton.BoneParents[i] = int(bone.ParentBone)
 			mdl.Skeleton.BoneInvBindMatrices[i] = mgl32.Mat4FromRows(
 				mgl32.Vec4{1.0, 0.0, 0.0, -bone.Pivot.X},

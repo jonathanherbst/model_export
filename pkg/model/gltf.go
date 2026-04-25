@@ -73,7 +73,7 @@ func ExportGLTF(mdl Model, path string) error {
 		for i, m := range mdl.Skeleton.BoneInvBindMatrices {
 			boneIdx := len(doc.Nodes)
 			t := m.Inv().Col(3).Vec3()
-			doc.Nodes = append(doc.Nodes, &gltf.Node{Name: fmt.Sprintf("Bone%d", i), Children: make([]int, 0)})
+			doc.Nodes = append(doc.Nodes, &gltf.Node{Name: mdl.Skeleton.BoneNames[i], Children: make([]int, 0)})
 			if mdl.Skeleton.BoneParents[i] > 0 {
 				parentBoneIdx := mdl.Skeleton.BoneParents[i]
 				parentIdx := *boneBaseNodeIdx + parentBoneIdx
@@ -170,37 +170,44 @@ type trackValue[T any] struct {
 
 func addAnimationTracks[T any](doc *gltf.Document, anim *gltf.Animation, tracks []AnimationTrack[T], boneBaseNodeIdx int, path gltf.TRSProperty) {
 	for _, track := range tracks {
-		if len(track.Timestamps) > 0 && (track.Interpolation == InterpolationLinear || track.Interpolation == InterpolationStep) {
-			trackData := make([]trackValue[T], len(track.Timestamps))
-			for i := range trackData {
-				trackData[i] = trackValue[T]{Time: track.Timestamps[i], Value: track.Values[i]}
-			}
-			sort.Slice(trackData, func(i, j int) bool {
-				return trackData[i].Time < trackData[j].Time
-			})
+		if len(track.Timestamps) > 0 {
+			if track.Interpolation == InterpolationLinear || track.Interpolation == InterpolationStep {
+				trackData := make([]trackValue[T], len(track.Timestamps))
+				for i := range trackData {
+					trackData[i] = trackValue[T]{Time: track.Timestamps[i], Value: track.Values[i]}
+				}
+				sort.Slice(trackData, func(i, j int) bool {
+					return trackData[i].Time < trackData[j].Time
+				})
 
-			timestamps := make([]float32, len(trackData))
-			values := make([]T, len(trackData))
-			for i, track := range trackData {
-				timestamps[i] = track.Time
-				values[i] = track.Value
-			}
+				timestamps := make([]float32, len(trackData))
+				values := make([]T, len(trackData))
+				for i, track := range trackData {
+					timestamps[i] = track.Time
+					values[i] = track.Value
+				}
 
-			timeAcc := modeler.WriteAccessor(doc, gltf.TargetArrayBuffer, timestamps)
-			transAcc := writeAccessor(doc, gltf.TargetArrayBuffer, values)
-			samplerIdx := len(anim.Samplers)
-			anim.Samplers = append(anim.Samplers, &gltf.AnimationSampler{
-				Interpolation: convertInterpolation(track.Interpolation),
-				Input:         timeAcc,
-				Output:        transAcc,
-			})
-			anim.Channels = append(anim.Channels, &gltf.AnimationChannel{
-				Sampler: samplerIdx,
-				Target: gltf.AnimationChannelTarget{
-					Node: new(boneBaseNodeIdx + track.Bone),
-					Path: path,
-				},
-			})
+				timeAcc := modeler.WriteAccessor(doc, gltf.TargetArrayBuffer, timestamps)
+				transAcc := writeAccessor(doc, gltf.TargetArrayBuffer, values)
+				samplerIdx := len(anim.Samplers)
+				anim.Samplers = append(anim.Samplers, &gltf.AnimationSampler{
+					Interpolation: convertInterpolation(track.Interpolation),
+					Input:         timeAcc,
+					Output:        transAcc,
+				})
+				anim.Channels = append(anim.Channels, &gltf.AnimationChannel{
+					Sampler: samplerIdx,
+					Target: gltf.AnimationChannelTarget{
+						Node: new(boneBaseNodeIdx + track.Bone),
+						Path: path,
+					},
+				})
+			} else {
+				logger.Warn("animation skipped: unsupported interpolation", "animation", anim.Name, "track", path, "bone", track.Bone, "interpolation", track.Interpolation)
+			}
+		} else if path == gltf.TRSRotation {
+			boneName := doc.Nodes[boneBaseNodeIdx+track.Bone].Name
+			logger.Debug("empty animation track", "animation", anim.Name, "bone", boneName)
 		}
 	}
 }

@@ -32,6 +32,7 @@ type Mesh struct {
 
 type Skeleton struct {
 	Name                string
+	BoneNames           []string
 	BoneParents         []int
 	BoneInvBindMatrices []mgl32.Mat4
 }
