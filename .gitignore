@@ -16,6 +16,7 @@ dbd
 *.zip
 *.m2
 *.gltf
+*.glb
 *.skin
 *.skel
 *.bone
