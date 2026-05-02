@@ -130,7 +130,7 @@ func (skel M2Skeleton) FillModel(mdl *model.Model) {
 					Values:        make([]mgl32.Vec4, len(ts)),
 				}
 				for trackIdx, v := range bone.Rotation.Values[animIdx] {
-					track.Values[trackIdx] = v.Decompress().IntoMGL32()
+					track.Values[trackIdx] = v.Decompress().IntoMGL32().Normalize()
 				}
 				mdl.Animations[animIdx].RotationTracks = append(mdl.Animations[animIdx].RotationTracks, track)
 			}

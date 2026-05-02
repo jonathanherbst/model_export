@@ -148,6 +148,39 @@ func init() {
 				return nil
 			}
 
+			casc_f, err := casc.OpenFileById(uint32(id), false)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to open casc file: %v\n", err)
+				os.Exit(2)
+			}
+			defer casc_f.Close()
+
+			len, err := io.Copy(f, casc_f)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%d bytes written to %s\n", len, args[1])
+			return nil
+		},
+	})
+
+	register(Command{
+		Name: "zxid",
+		Help: "zxid <id> <extract_path> `Extract a file by id from the casc with encrupted parts zeroed`",
+		Handler: func(args []string, casc *blizzard.Casc, extra interface{}) error {
+			f, err := os.Create(args[1])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to open extract file: %v\n", err)
+				os.Exit(1)
+			}
+			defer f.Close()
+
+			id, err := strconv.ParseUint(args[0], 10, 32)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "usage: fileinfo <id>")
+				return nil
+			}
+
 			casc_f, err := casc.OpenFileById(uint32(id), true)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "failed to open casc file: %v\n", err)

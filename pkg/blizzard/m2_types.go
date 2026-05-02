@@ -189,6 +189,7 @@ func (quat M2CompQuat) Decompress() M2F32Quat {
 		} else {
 			return float32(int(v)-32767) / 32767.0
 		}
+		//return (float32(v) - 32767.0) / 32768.0
 	}
 	q := M2F32Quat{
 		decompress(quat.X),

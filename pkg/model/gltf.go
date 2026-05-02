@@ -68,22 +68,27 @@ func ExportGLTF(mdl Model, path string) error {
 
 		// setup the bone structure and load the inverse bind matrices
 		boneBaseNodeIdx = new(len(doc.Nodes))
-		joints := make([]int, len(mdl.Skeleton.BoneInvBindMatrices))
-		inverseBindMatrices := make([][4][4]float32, len(mdl.Skeleton.BoneInvBindMatrices))
+		numBones := len(mdl.Skeleton.BoneInvBindMatrices)
+		joints := make([]int, numBones)
+		nodes := make([]*gltf.Node, numBones*2)
+		inverseBindMatrices := make([][4][4]float32, numBones)
 		for i, m := range mdl.Skeleton.BoneInvBindMatrices {
-			boneIdx := len(doc.Nodes)
+			// bone node
+			nodes[i] = &gltf.Node{Name: mdl.Skeleton.BoneNames[i], Children: make([]int, 0)}
+			boneIdx := *boneBaseNodeIdx + i
+			// parent node
+			nodes[numBones+i] = &gltf.Node{Name: mdl.Skeleton.BoneNames[i] + "_p", Children: []int{boneIdx}}
+			prefixBoneIdx := boneIdx + numBones
 			t := m.Inv().Col(3).Vec3()
-			doc.Nodes = append(doc.Nodes, &gltf.Node{Name: mdl.Skeleton.BoneNames[i], Children: make([]int, 0)})
 			if mdl.Skeleton.BoneParents[i] > 0 {
 				parentBoneIdx := mdl.Skeleton.BoneParents[i]
-				parentIdx := *boneBaseNodeIdx + parentBoneIdx
 				parentBindTranslation := mdl.Skeleton.BoneInvBindMatrices[parentBoneIdx].Inv().Col(3).Vec3()
 				t = t.Sub(parentBindTranslation)
-				doc.Nodes[boneIdx].Translation = [3]float64{float64(t[0]), float64(t[1]), float64(t[2])}
-				doc.Nodes[parentIdx].Children = append(doc.Nodes[parentIdx].Children, boneIdx)
+				nodes[numBones+i].Translation = [3]float64{float64(t[0]), float64(t[1]), float64(t[2])}
+				nodes[parentBoneIdx].Children = append(nodes[parentBoneIdx].Children, prefixBoneIdx)
 			} else {
-				doc.Nodes[boneIdx].Translation = [3]float64{float64(t[0]), float64(t[1]), float64(t[2])}
-				doc.Nodes[skelNodeIdx].Children = append(doc.Nodes[skelNodeIdx].Children, boneIdx)
+				nodes[numBones+i].Translation = [3]float64{float64(t[0]), float64(t[1]), float64(t[2])}
+				doc.Nodes[skelNodeIdx].Children = append(doc.Nodes[skelNodeIdx].Children, prefixBoneIdx)
 			}
 
 			joints[i] = boneIdx
@@ -95,8 +100,9 @@ func ExportGLTF(mdl Model, path string) error {
 				{m.At(3, 0), m.At(3, 1), m.At(3, 2), m.At(3, 3)},
 			}
 		}
+		doc.Nodes = append(doc.Nodes, nodes...)
 
-		ibmAcc := modeler.WriteAccessor(doc, gltf.TargetArrayBuffer, inverseBindMatrices)
+		ibmAcc := modeler.WriteInverseBindMatrices(doc, inverseBindMatrices)
 		doc.Skins = []*gltf.Skin{{
 			Name:                "Skeleton",
 			Joints:              joints,
