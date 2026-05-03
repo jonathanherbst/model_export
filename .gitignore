@@ -17,6 +17,8 @@ dbd
 *.m2
 *.gltf
 *.glb
+*.blp
+*.png
 *.skin
 *.skel
 *.bone
