@@ -372,7 +372,8 @@ func init() {
 }
 
 func printRecord(record blizzard.DBDRecord) {
-	for i, column := range record.Schema.Columns {
+	for i := range record.GetNumFields() {
+		column := record.Schema.Columns[i]
 		fmt.Printf("%s", column.Name)
 		if column.ForeignKey != nil {
 			fmt.Printf(" <%s>", *column.ForeignKey)
