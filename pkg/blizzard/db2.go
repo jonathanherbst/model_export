@@ -288,7 +288,12 @@ func (file *DB2File) GetFixedRecordsByForeignKey(id uint32, yield func(DB2FixedR
 
 // Iterate all sections in the file
 func (file *DB2File) GetSections(yield func(DB2Section) bool) {
+	recordOffset := uint32(0)
+	stringOffset := file.Header.RecordSize * file.Header.RecordCount
 	for _, header := range file.Sections {
+		// add here and subtract later so we don't miss a
+		recordOffset += header.RecordCount * file.Header.RecordSize
+		stringOffset += header.StringTableSize
 		if header.TactKeyHash != 0 {
 			// we don't know how to handle encrypted sections yet
 			continue
@@ -298,7 +303,8 @@ func (file *DB2File) GetSections(yield func(DB2Section) bool) {
 			continue
 		}
 
-		section := DB2Section{parent: file}
+		stringIdxOffset := stringOffset - header.StringTableSize - (recordOffset - header.RecordCount*file.Header.RecordSize)
+		section := DB2Section{parent: file, stringOffset: uint(stringIdxOffset)}
 
 		section.numRecords = header.RecordCount
 		recordRegionSize := (header.RecordCount * file.Header.RecordSize) + header.StringTableSize
@@ -379,6 +385,7 @@ func (file *DB2File) GetSections(yield func(DB2Section) bool) {
 type DB2Section struct {
 	parent          *DB2File
 	recordRegion    []byte
+	stringOffset    uint
 	idList          []uint32
 	copyTable       map[uint32]uint32
 	offsetEntries   []WDC5OffsetMapEntry
@@ -451,7 +458,8 @@ func (section *DB2Section) GetFixedRecord(idx int) DB2FixedRecord {
 }
 
 func (section DB2Section) getString(index uint) string {
-	return stringFromNullTermBytes(section.recordRegion[index:])
+	recordRegionIdx := uint(section.numRecords*section.parent.Header.RecordSize) + (index - section.stringOffset)
+	return stringFromNullTermBytes(section.recordRegion[recordRegionIdx:])
 }
 
 // FixedRecord represents a fixed record
@@ -516,9 +524,10 @@ func (r DB2FixedRecord) GetFieldAsString(index int) string {
 	// String indexes are referenced from where the field begins in the record.
 	// Calculate the index from the beginning of the record.
 	fieldIndex := r.getFieldIndexWithID(index)
-	recordIndex := uint(stringIndex) + r.index*uint(r.parent.parent.Header.RecordSize) + uint(r.fields()[fieldIndex].FieldOffsetBits/8)
+	recordOffset := uint(r.fields()[fieldIndex].FieldOffsetBits / 8)
+	sectionOffset := r.index*uint(r.parent.parent.Header.RecordSize) + recordOffset // still doesn't have
 	// get_string indexes from the string block
-	return r.parent.getString(recordIndex)
+	return r.parent.getString(uint(stringIndex) + sectionOffset)
 }
 
 func (r DB2FixedRecord) getFieldIndexWithID(index int) int {
