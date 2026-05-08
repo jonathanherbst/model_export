@@ -34,3 +34,16 @@ Get to the Cata+ m2 file for a race:
 - Find the creature display info from `CreatureDisplayInfo` using `ChrModel::DisplayID` as the id
 - Find the creature model data from `CreatureModelData` using `CreatureDisplayInfo::ModelID` as the id
 - The file id is `CreatureModelData::FileDataID`
+
+Options:
+
+- `ChrCustomizationOption` all options for a `ChrModel` linked back with `ChrCustomizationOption::ChrModelID`
+- `ChrCustomizationElement` contains links to different customization types and links to `ChrCustomizationChoice` with `ChrCustomizationChoiceID`
+- `ChrCustomizationChoice` all the choices for each option linked back with `ChrCustomizationOptionID`
+
+For Textures:
+
+- `CharComponentTextureLayouts` have the texture layout size from `ChrModel::CharComponentTextureLayoutID`
+- `CharComponentTextureSections` has one record per customization element, linked to the model through `CharComponentTextureLayoutID`
+- `ChrModelTextureLayer` links to `CharComponentTextureLayouts` and `ChrCustomizationMaterial` through `ChrModelTextureTargetID`, but why 2 of them?
+- `ChrCustomizationMaterial` links to `TextureFileData` through `MaterialResourcesID`, which comes from `ChrCustomizationElement`

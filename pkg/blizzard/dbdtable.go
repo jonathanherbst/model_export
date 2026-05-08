@@ -80,6 +80,42 @@ func (r DBDRecord) GetNumFields() int {
 	return r.record.NumFields()
 }
 
+func (r DBDRecord) GetFieldByName(name string) interface{} {
+	idx, err := r.Schema.GetIndexByName(name)
+	if err != nil {
+		panic("no such field name")
+	}
+	if idx == r.Schema.IDIndex {
+		return r.GetID()
+	} else if idx < r.Schema.IDIndex {
+		return r.GetField(idx)
+	} else {
+		return r.GetField(idx - 1)
+	}
+}
+
+func (r DBDRecord) GetStringFieldByName(name string) string {
+	switch f := r.GetFieldByName(name).(type) {
+	case string:
+		return f
+	default:
+		panic("field type is not a string")
+	}
+}
+
+func (r DBDRecord) GetIntFieldByName(name string) int64 {
+	switch f := r.GetFieldByName(name).(type) {
+	case int64:
+		return f
+	case uint64:
+		return int64(f)
+	case uint32:
+		return int64(f)
+	default:
+		panic("field type is not an integer")
+	}
+}
+
 // Can return an int64, a uint64, a string, a []int64, or a []uint64
 func (r DBDRecord) GetField(index int) interface{} {
 	column := r.Schema.GetColumn(index)

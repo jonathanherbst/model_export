@@ -46,17 +46,21 @@ func M2FromReader(r io.Reader) (*M2, error) {
 		case "SKID":
 			m2.SkelFileIds = make([]uint32, len(data)/4)
 			binary.Decode(data, binary.LittleEndian, m2.SkelFileIds)
+		case "TXID":
+			m2.TextureFileIds = make([]uint32, len(data)/4)
+			binary.Decode(data, binary.LittleEndian, m2.TextureFileIds)
 		}
 	}
 	return &m2, nil
 }
 
 type M2 struct {
-	Vertices    []M2Vertex
-	Bones       []m2LoadedBone
-	Sequences   []M2Sequence
-	SkinFileIds []uint32
-	SkelFileIds []uint32
+	Vertices       []M2Vertex
+	Bones          []m2LoadedBone
+	Sequences      []M2Sequence
+	SkinFileIds    []uint32
+	SkelFileIds    []uint32
+	TextureFileIds []uint32
 }
 
 func (m2 M2) FillModel(mdl *model.Model) {
