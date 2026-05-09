@@ -178,6 +178,10 @@ type C2Vector struct {
 	X, Y float32
 }
 
+func (vec C2Vector) IntoMGL32() mgl32.Vec2 {
+	return mgl32.Vec2{vec.X, vec.Y}
+}
+
 type M2CompQuat struct {
 	X, Y, Z, W int16
 }

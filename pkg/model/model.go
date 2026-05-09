@@ -9,6 +9,8 @@ type Model struct {
 	VertexNormals     []mgl32.Vec3
 	VertexBones       [][4]uint8
 	VertexBoneWeights [][4]uint8
+	VertexTexCoords_0 []mgl32.Vec2
+	VertexTexCoords_1 []mgl32.Vec2
 	Skin              *Skin
 	Skeleton          *Skeleton
 	Animations        []Animation

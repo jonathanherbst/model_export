@@ -55,6 +55,18 @@ func ExportGLTF(mdl Model, path string) error {
 			Data: mdl.VertexBoneWeights,
 		})
 	}
+	if len(mdl.VertexTexCoords_0) > 0 {
+		attrs = append(attrs, modeler.PrimitiveAttribute{
+			Name: gltf.TEXCOORD_0,
+			Data: mgl32Vec2ArrayToGLTF(mdl.VertexTexCoords_0),
+		})
+	}
+	if len(mdl.VertexTexCoords_1) > 0 {
+		attrs = append(attrs, modeler.PrimitiveAttribute{
+			Name: gltf.TEXCOORD_1,
+			Data: mgl32Vec2ArrayToGLTF(mdl.VertexTexCoords_1),
+		})
+	}
 	meshAttrs, err := modeler.WritePrimitiveAttributes(doc, attrs...)
 	if err != nil {
 		return fmt.Errorf("failed writing primitive accessors: %w", err)
@@ -241,6 +253,18 @@ func writeAccessor(doc *gltf.Document, target gltf.Target, data any) int {
 		return modeler.WriteAccessor(doc, target, gltfData)
 	}
 	return modeler.WriteAccessor(doc, target, data)
+}
+
+func mgl32Vec2ToGLTF(v mgl32.Vec2) [2]float32 {
+	return [2]float32{v.X(), v.Y()}
+}
+
+func mgl32Vec2ArrayToGLTF(a []mgl32.Vec2) [][2]float32 {
+	gltfA := make([][2]float32, len(a))
+	for i := range a {
+		gltfA[i] = mgl32Vec2ToGLTF(a[i])
+	}
+	return gltfA
 }
 
 func mgl32Vec3ToGLTF(v mgl32.Vec3) [3]float32 {

@@ -69,12 +69,16 @@ func (m2 M2) FillModel(mdl *model.Model) {
 		mdl.VertexNormals = make([]mgl32.Vec3, len(m2.Vertices))
 		mdl.VertexBones = make([][4]uint8, len(m2.Vertices))
 		mdl.VertexBoneWeights = make([][4]uint8, len(m2.Vertices))
+		mdl.VertexTexCoords_0 = make([]mgl32.Vec2, len(m2.Vertices))
+		mdl.VertexTexCoords_1 = make([]mgl32.Vec2, len(m2.Vertices))
 
 		for i, v := range m2.Vertices {
 			mdl.VertexPositions[i] = v.Pos.IntoMGL32()
 			mdl.VertexNormals[i] = v.Normal.IntoMGL32().Normalize()
 			mdl.VertexBones[i] = v.BoneIndices
 			mdl.VertexBoneWeights[i] = v.BoneWeights // maybe need to normalize these?
+			mdl.VertexTexCoords_0[i] = v.TexCoords[0].IntoMGL32()
+			mdl.VertexTexCoords_1[i] = v.TexCoords[1].IntoMGL32()
 		}
 	}
 }
