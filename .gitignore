@@ -1,5 +1,6 @@
 # vscode crap
 .vscode
+.devcontainer/personal
 
 # zig
 zig-out
