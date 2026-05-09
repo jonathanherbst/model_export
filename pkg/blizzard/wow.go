@@ -51,13 +51,13 @@ func OpenWOWCasc(casc *Casc, cachePath string) (*WOWCasc, error) {
 }
 
 type WOWCasc struct {
-	casc   *Casc
+	Casc   *Casc
 	dbdZip *zip.ReadCloser
 	tables map[string]string
 }
 
 func (wow *WOWCasc) Close() {
-	wow.casc.Close()
+	wow.Casc.Close()
 	wow.dbdZip.Close()
 }
 
@@ -70,7 +70,7 @@ func (wow *WOWCasc) GetTables(yield func(string) bool) {
 }
 
 func (wow *WOWCasc) GetTable(name string) (*DBDTable, error) {
-	file, err := wow.casc.OpenFileByName(wow.tables[name], true)
+	file, err := wow.Casc.OpenFileByName(wow.tables[name], true)
 	if err != nil {
 		return nil, fmt.Errorf("get table file: %w", err)
 	}

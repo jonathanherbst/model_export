@@ -166,7 +166,7 @@ func ExportGLTF(mdl Model, path string) error {
 		addAnimationTracks(doc, doc.Animations[i], anim.ScaleTracks, *boneBaseNodeIdx, gltf.TRSScale)
 	}
 
-	return gltf.Save(doc, path)
+	return gltf.SaveBinary(doc, path)
 }
 
 type trackValue[T any] struct {

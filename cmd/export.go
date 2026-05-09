@@ -5,7 +5,9 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"jph/model-export/pkg/blizzard"
+	"jph/model-export/pkg/model"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -149,6 +151,56 @@ func wowExportModel(wow *blizzard.WOWCasc, path string, modelName string, gender
 	}
 
 	fmt.Printf("model file id: %d\n", fileDataId)
+
+	var mdl model.Model
+
+	modelFile, err := wow.Casc.OpenFileById(uint32(fileDataId), false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to open model file: %v\n", err)
+		os.Exit(1)
+	}
+
+	m2File, err := blizzard.M2FromReader(modelFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to parse model file: %v\n", err)
+		os.Exit(0)
+	}
+	m2File.FillModel(&mdl)
+
+	if len(m2File.SkinFileIds) > 0 {
+		skinFile, err := wow.Casc.OpenFileById(uint32(m2File.SkinFileIds[0]), false)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to open skin file: %v\n", err)
+			os.Exit(1)
+		}
+		buf, err := io.ReadAll(skinFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to read skin file: %v\n", err)
+			os.Exit(1)
+		}
+		skin, err := blizzard.M2SkinFromBuf(buf)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to parse skin file: %v\n", err)
+			os.Exit(1)
+		}
+		skin.FillModel(&mdl)
+	}
+
+	for _, skelFileId := range m2File.SkelFileIds {
+		skelFile, err := wow.Casc.OpenFileById(uint32(skelFileId), false)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to open skel file: %v\n", err)
+			os.Exit(1)
+		}
+		skel, err := blizzard.M2SkelFromReader(skelFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to parse skel file: %v\n", err)
+			os.Exit(1)
+		}
+		skel.FillModel(&mdl)
+	}
+
+	model.ExportGLTF(mdl, path)
 }
 
 func init() {
