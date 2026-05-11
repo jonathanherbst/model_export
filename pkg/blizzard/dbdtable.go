@@ -58,11 +58,13 @@ func (table DBDTable) GetFixedRecordById(id uint32) *DBDRecord {
 	return nil
 }
 
-func (table DBDTable) GetFixedRecordsByForeignKey(id uint32, yield func(DBDRecord) bool) {
-	for db2_record := range func(yield func(DB2FixedRecord) bool) { table.database.GetFixedRecordsByForeignKey(id, yield) } {
-		record := DBDRecord{table.Schema, db2_record}
-		if !yield(record) {
-			return
+func (table DBDTable) GetFixedRecordsByForeignKey(id uint32) func(func(DBDRecord) bool) {
+	return func(yield func(DBDRecord) bool) {
+		for db2_record := range table.database.GetFixedRecordsByForeignKey(id) {
+			record := DBDRecord{table.Schema, db2_record}
+			if !yield(record) {
+				return
+			}
 		}
 	}
 }

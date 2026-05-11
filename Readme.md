@@ -45,5 +45,10 @@ For Textures:
 
 - `CharComponentTextureLayouts` have the texture layout size from `ChrModel::CharComponentTextureLayoutID`
 - `CharComponentTextureSections` has one record per customization element, linked to the model through `CharComponentTextureLayoutID`
-- `ChrModelTextureLayer` links to `CharComponentTextureLayouts` and `ChrCustomizationMaterial` through `ChrModelTextureTargetID`, but why 2 of them?
+- `ChrModelTextureLayer` links to `CharComponentTextureLayouts` and `ChrCustomizationMaterial` through `ChrModelTextureTargetID`, use the first one.
+- `CharComponentTextureSections` maps with `ChrModelTextureLayer` using the `SectionType` field and the `TextureSectionTypeBitMask` field
+  - if `(1 << SectionType) & TextureSectionTypeBitMask` is non zero and they map to the same layout the section is part of the layer.
+  - maybe there is one layer per section?
 - `ChrCustomizationMaterial` links to `TextureFileData` through `MaterialResourcesID`, which comes from `ChrCustomizationElement`
+
+

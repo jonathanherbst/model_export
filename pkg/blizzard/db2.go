@@ -276,11 +276,13 @@ func (file *DB2File) GetFixedRecordById(id uint32) *DB2FixedRecord {
 	return nil
 }
 
-func (file *DB2File) GetFixedRecordsByForeignKey(id uint32, yield func(DB2FixedRecord) bool) {
-	for section := range file.GetSections {
-		for record := range func(yield func(DB2FixedRecord) bool) { section.GetFixedRecordsByForeignKey(id, yield) } {
-			if !yield(record) {
-				return
+func (file *DB2File) GetFixedRecordsByForeignKey(id uint32) func(func(DB2FixedRecord) bool) {
+	return func(yield func(DB2FixedRecord) bool) {
+		for section := range file.GetSections {
+			for record := range func(yield func(DB2FixedRecord) bool) { section.GetFixedRecordsByForeignKey(id, yield) } {
+				if !yield(record) {
+					return
+				}
 			}
 		}
 	}

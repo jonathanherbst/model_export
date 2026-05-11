@@ -1,6 +1,8 @@
 package model
 
 import (
+	"image"
+
 	"github.com/go-gl/mathgl/mgl32"
 )
 
@@ -14,6 +16,7 @@ type Model struct {
 	Skin              *Skin
 	Skeleton          *Skeleton
 	Animations        []Animation
+	Configurations    map[string][]ConfigurationChoice
 }
 
 type RenderProcess int
@@ -62,3 +65,18 @@ const (
 	InterpolationCubicBezier
 	InterpolationCubicHermite
 )
+
+type ConfigurationChoice struct {
+	Name     string
+	Color    uint32
+	Material *MaterialFragment
+	GeosetId int
+}
+
+type MaterialFragment struct {
+	Img    image.Image
+	X      uint
+	Y      uint
+	Width  uint
+	Height uint
+}

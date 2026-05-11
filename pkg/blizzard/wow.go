@@ -6,10 +6,12 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"jph/model-export/pkg/model"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/google/go-github/v84/github"
@@ -93,6 +95,248 @@ func (wow *WOWCasc) GetTable(name string) (*DBDTable, error) {
 		return nil, fmt.Errorf("get table, open table: %w", err)
 	}
 	return table, nil
+}
+
+func (wow *WOWCasc) FindRaceModelId(modelName string, gender *int) *int {
+	var raceId int = -1
+	if races, err := wow.GetTable("ChrRaces"); err == nil {
+		for record := range races.GetRecords {
+			if record.GetStringFieldByName("Name_lang") == modelName {
+				raceId = int(record.GetID())
+				break
+			}
+		}
+	}
+	if raceId < 0 {
+		return nil
+	}
+
+	var modelId int = -1
+	if chrxmodels, err := wow.GetTable("ChrRaceXChrModel"); err == nil {
+		for record := range chrxmodels.GetFixedRecordsByForeignKey(uint32(raceId)) {
+			if gender != nil && int(record.GetIntFieldByName("Sex")) == *gender {
+				modelId = int(record.GetIntFieldByName("ChrModelID"))
+				break
+			}
+		}
+	}
+
+	if modelId < 0 {
+		return nil
+	}
+	return &modelId
+}
+
+type textureSection struct {
+	sectionType int
+	x           uint
+	y           uint
+	width       uint
+	height      uint
+}
+
+func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
+	modelTable, err := wow.GetTable("ChrModel")
+	if err != nil {
+		panic("no ChrModel table")
+	}
+	chrDisplayInfo, err := wow.GetTable("CreatureDisplayInfo")
+	if err != nil {
+		panic("no CreatureDisplayInfo table")
+	}
+	creatureModelData, err := wow.GetTable("CreatureModelData")
+	if err != nil {
+		panic("no CreatureModelData table")
+	}
+	componentTextureSections, err := wow.GetTable("CharComponentTextureSections")
+	if err != nil {
+		panic("no CharComponentTextureSections table")
+	}
+
+	var textureSections []textureSection
+	var fileDataId int = -1
+	if model := modelTable.GetFixedRecordById(uint32(modelId)); model != nil {
+		displayId := model.GetIntFieldByName("DisplayID")
+		if displayInfo := chrDisplayInfo.GetFixedRecordById(uint32(displayId)); displayInfo != nil {
+			modelDataId := displayInfo.GetIntFieldByName("ModelID")
+			if record := creatureModelData.GetFixedRecordById(uint32(modelDataId)); record != nil {
+				fileDataId = int(record.GetIntFieldByName("FileDataID"))
+			}
+		}
+
+		textureLayoutId := model.GetIntFieldByName("CharComponentTextureLayoutID")
+		for section := range componentTextureSections.GetFixedRecordsByForeignKey(uint32(textureLayoutId)) {
+			textureSections = append(textureSections, textureSection{
+				sectionType: int(section.GetIntFieldByName("SectionType")),
+				x:           uint(section.GetIntFieldByName("X")),
+				y:           uint(section.GetIntFieldByName("Y")),
+				width:       uint(section.GetIntFieldByName("Width")),
+				height:      uint(section.GetIntFieldByName("Height")),
+			})
+		}
+
+	}
+	if fileDataId < 0 {
+		return nil
+	}
+
+	var mdl model.Model
+
+	modelFile, err := wow.Casc.OpenFileById(uint32(fileDataId), false)
+	if err != nil {
+		return nil
+	}
+
+	m2File, err := M2FromReader(modelFile)
+	if err != nil {
+		return nil
+	}
+	m2File.FillModel(&mdl)
+
+	if len(m2File.SkinFileIds) > 0 {
+		skinFile, err := wow.Casc.OpenFileById(uint32(m2File.SkinFileIds[0]), false)
+		if err != nil {
+			return nil
+		}
+		buf, err := io.ReadAll(skinFile)
+		if err != nil {
+			return nil
+		}
+		skin, err := M2SkinFromBuf(buf)
+		if err != nil {
+			return nil
+		}
+		skin.FillModel(&mdl)
+	}
+
+	for _, skelFileId := range m2File.SkelFileIds {
+		skelFile, err := wow.Casc.OpenFileById(uint32(skelFileId), false)
+		if err != nil {
+			return nil
+		}
+		skel, err := M2SkelFromReader(skelFile)
+		if err != nil {
+			return nil
+		}
+		skel.FillModel(&mdl)
+	}
+
+	return &mdl
+}
+
+func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelId int, textureSections []textureSection) {
+	custOptionTable, err := wow.GetTable("ChrCustomizationOption")
+	if err != nil {
+		panic("no ChrCustomizationOption table")
+	}
+	custChoicesTable, err := wow.GetTable("ChrCustomizationChoice")
+	if err != nil {
+		panic("no ChrCustomizationChoice table")
+	}
+	custElementTable, err := wow.GetTable("ChrCustomizationElement")
+	if err != nil {
+		panic("no ChrCustomizationElement table")
+	}
+	custMaterialTable, err := wow.GetTable("ChrCustomizationMaterial")
+	if err != nil {
+		panic("no ChrCustomizationMaterial table")
+	}
+	textureFileDataTable, err := wow.GetTable("TextureFileData")
+	if err != nil {
+		panic("no TextureFileData table")
+	}
+	textureLayerTable, err := wow.GetTable("ChrModelTextureLayer")
+	if err != nil {
+		panic("no ChrModelTextureLayer table")
+	}
+
+	var choices map[uint32]*model.ConfigurationChoice
+	for option := range custOptionTable.GetFixedRecordsByForeignKey(uint32(modelId)) {
+		optionName := option.GetStringFieldByName("Name_lang")
+
+		choiceRecords := make([]DBDRecord, 0)
+		for choice := range custChoicesTable.GetFixedRecordsByForeignKey(option.GetID()) {
+			choiceRecords = append(choiceRecords, choice)
+		}
+		sort.Slice(choiceRecords, func(i, j int) bool {
+			return choiceRecords[i].GetIntFieldByName("OrderIndex") < choiceRecords[j].GetIntFieldByName("OrderIndex")
+		})
+
+		mdl.Configurations[optionName] = make([]model.ConfigurationChoice, len(choiceRecords))
+		for i, choice := range choiceRecords {
+			var color uint32 = 0
+			switch v := choice.GetFieldByName("SwatchColor").(type) {
+			case [2]int64:
+				color = uint32(v[0])
+			default:
+				panic("SwatchColor has unexpected type")
+			}
+
+			mdl.Configurations[optionName][i] = model.ConfigurationChoice{
+				Name:  choice.GetStringFieldByName("Name_lang"),
+				Color: color,
+			}
+			choices[choice.GetID()] = &mdl.Configurations[optionName][i]
+		}
+	}
+
+	// cache all the texture layers
+	var textureLayers []DBDRecord
+	for textureLayer := range textureLayerTable.GetRecords {
+		textureLayers = append(textureLayers, textureLayer)
+	}
+
+	for custElement := range custElementTable.GetRecords {
+		choiceId := uint32(custElement.GetIntFieldByName("ChrCustomizationChoiceID"))
+		if choice, ok := choices[choiceId]; ok {
+			geosetId := int(custElement.GetIntFieldByName("ChrCustomizationGeosetID"))
+			if geosetId > 0 {
+				choice.GeosetId = geosetId
+			}
+
+			materialId := uint32(custElement.GetIntFieldByName("ChrCustomizationMaterialID"))
+			material := custMaterialTable.GetFixedRecordById(materialId)
+			if material != nil {
+				var materialFragment model.MaterialFragment
+				textureTargetId := material.GetIntFieldByName("ChrModelTextureTargetID")
+				for _, textureLayer := range textureLayers {
+					textureTargetIds := textureLayer.GetFieldByName("ChrModelTextureTargetID")
+					var matched bool = false
+					switch ids := textureTargetIds.(type) {
+					case [2]int64:
+						matched = ids[0] == textureTargetId
+					}
+					if matched {
+						mask := textureLayer.GetIntFieldByName("TextureSectionTypeBitMask")
+						for _, textureSection := range textureSections {
+							if ((1 << textureSection.sectionType) & mask) != 0 {
+								materialFragment.X = textureSection.x
+								materialFragment.Y = textureSection.y
+								materialFragment.Width = textureSection.width
+								materialFragment.Height = textureSection.height
+								break
+							}
+						}
+					}
+				}
+
+				resourcesId := material.GetIntFieldByName("MaterialResourcesID")
+				for textureFileData := range textureFileDataTable.GetFixedRecordsByForeignKey(uint32(resourcesId)) {
+					// what do I do with multiple texture file datas?
+					if textureFile, err := wow.Casc.OpenFileById(textureFileData.GetID(), false); err == nil {
+						if blp, err := BLPFromReader(textureFile); err == nil {
+							if img, err := blp.Decode(0); err == nil {
+								materialFragment.Img = img
+								break
+							}
+						}
+					}
+				}
+
+				choice.Material = &materialFragment
+			}
+		}
+	}
 }
 
 func WOWGetLatestListfile(cachePath string) (string, error) {
