@@ -332,7 +332,7 @@ func init() {
 					return nil
 				}
 
-				for record := range func(yield func(blizzard.DBDRecord) bool) { table.GetFixedRecordsByForeignKey(uint32(id), yield) } {
+				for record := range table.GetFixedRecordsByForeignKey(uint32(id)) {
 					printRecord(record)
 					fmt.Println()
 				}
