@@ -323,13 +323,17 @@ func (file *DB2File) GetSections(yield func(DB2Section) bool) {
 			continue
 		}
 
-		section.copyTable = make(map[uint32]uint32)
+		section.copyTable = make(map[uint32]int)
 		for _ = range header.CopyTableCount {
 			var entry WDC5CopyTableEntry
 			if err := binary.Read(file.reader, binary.LittleEndian, &entry); err != nil {
 				break
 			}
-			section.copyTable[entry.IDOfNewRow] = entry.IDOfCopiedRow
+			for i, id := range section.idList {
+				if entry.IDOfCopiedRow == id {
+					section.copyTable[entry.IDOfNewRow] = i
+				}
+			}
 		}
 
 		section.offsetEntries = make([]WDC5OffsetMapEntry, header.OffsetMapIDCount)
@@ -389,7 +393,7 @@ type DB2Section struct {
 	recordRegion    []byte
 	stringOffset    uint
 	idList          []uint32
-	copyTable       map[uint32]uint32
+	copyTable       map[uint32]int
 	offsetEntries   []WDC5OffsetMapEntry
 	offsetIds       []uint32
 	foreignKeyMinId uint32
@@ -401,19 +405,29 @@ type DB2Section struct {
 func (section *DB2Section) FixedRecords(yield func(DB2FixedRecord) bool) {
 	for idx := 0; idx < int(section.numRecords); idx++ {
 		if !yield(section.GetFixedRecord(idx)) {
-			break
+			return
+		}
+	}
+	for id, idx := range section.copyTable {
+		record := section.GetFixedRecord(idx)
+		record.id = &id
+		if !yield(record) {
+			return
 		}
 	}
 }
 
 func (section *DB2Section) GetFixedRecordById(id uint32) *DB2FixedRecord {
 	if section.parent.HasNonInlineIDs() {
-		if copied_id, ok := section.copyTable[id]; ok {
-			id = copied_id
+		var idx int
+		if copyIdx, ok := section.copyTable[id]; ok {
+			idx = copyIdx
+		} else {
+			idx = sort.Search(len(section.idList), func(i int) bool { return section.idList[i] >= id })
 		}
-		idx := sort.Search(len(section.idList), func(i int) bool { return section.idList[i] >= id })
 		if idx < len(section.idList) && section.idList[idx] == id {
 			record := section.GetFixedRecord(idx)
+			record.id = &id
 			return &record
 		}
 	} else {
