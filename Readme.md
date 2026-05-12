@@ -43,12 +43,10 @@ Options:
 
 For Textures:
 
-- `CharComponentTextureLayouts` have the texture layout size from `ChrModel::CharComponentTextureLayoutID`
-- `CharComponentTextureSections` has one record per customization element, linked to the model through `CharComponentTextureLayoutID`
-- `ChrModelTextureLayer` links to `CharComponentTextureLayouts` and `ChrCustomizationMaterial` through `ChrModelTextureTargetID`, use the first one.
-- `CharComponentTextureSections` maps with `ChrModelTextureLayer` using the `SectionType` field and the `TextureSectionTypeBitMask` field
-  - if `(1 << SectionType) & TextureSectionTypeBitMask` is non zero and they map to the same layout the section is part of the layer.
-  - maybe there is one layer per section?
-- `ChrCustomizationMaterial` links to `TextureFileData` through `MaterialResourcesID`, which comes from `ChrCustomizationElement`
+From `ChrCustomizationElement::ChrCustomizationMaterialID` we can get a `ChrCustomizationMaterial` and then `ChrCustomizationMaterial::MaterialResourcesID` gets us `TextureFileData` which gets us the file id for the blp texture
 
+With the layout id from `ChrModel::CharComponentTextureLayoutID` we can find the layer where `ChrModelTextureLayer::CharComponentTextureLayoutsID` == layout id and `ChrModelTextureLayer::ChrModelTextureTargetID_0` == `ChrCustomizationMaterial::ChrModelTextureTargetID`
 
+Then we can find the `CharComponentTextureSections` where `CharComponentTextureSections::CharComponentTextureLayoutsID` == layout id and `((1 << CharComponentTextureSections::SectionType) & ChrModelTextureLayer::TextureSectionTypeBitMask) != 0` unless `ChrModelTextureLayer::TextureSectionTypeBitMask` is -1 in which case the texture takes up the entire layout.
+
+The layer has the blend mode with the `BlendMode` column and the order with the `Layer` column.
