@@ -127,14 +127,6 @@ func (wow *WOWCasc) FindRaceModelId(modelName string, gender *int) *int {
 	return &modelId
 }
 
-type textureSection struct {
-	sectionType int
-	x           uint
-	y           uint
-	width       uint
-	height      uint
-}
-
 func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 	modelTable, err := wow.GetTable("ChrModel")
 	if err != nil {
@@ -148,33 +140,18 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 	if err != nil {
 		panic("no CreatureModelData table")
 	}
-	componentTextureSections, err := wow.GetTable("CharComponentTextureSections")
-	if err != nil {
-		panic("no CharComponentTextureSections table")
+
+	modelRecord := modelTable.GetFixedRecordById(uint32(modelId))
+	if modelRecord == nil {
+		return nil
 	}
-
-	var textureSections []textureSection
 	var fileDataId int = -1
-	if model := modelTable.GetFixedRecordById(uint32(modelId)); model != nil {
-		displayId := model.GetIntFieldByName("DisplayID")
-		if displayInfo := chrDisplayInfo.GetFixedRecordById(uint32(displayId)); displayInfo != nil {
-			modelDataId := displayInfo.GetIntFieldByName("ModelID")
-			if record := creatureModelData.GetFixedRecordById(uint32(modelDataId)); record != nil {
-				fileDataId = int(record.GetIntFieldByName("FileDataID"))
-			}
+	displayId := modelRecord.GetIntFieldByName("DisplayID")
+	if displayInfo := chrDisplayInfo.GetFixedRecordById(uint32(displayId)); displayInfo != nil {
+		modelDataId := displayInfo.GetIntFieldByName("ModelID")
+		if record := creatureModelData.GetFixedRecordById(uint32(modelDataId)); record != nil {
+			fileDataId = int(record.GetIntFieldByName("FileDataID"))
 		}
-
-		textureLayoutId := model.GetIntFieldByName("CharComponentTextureLayoutID")
-		for section := range componentTextureSections.GetFixedRecordsByForeignKey(uint32(textureLayoutId)) {
-			textureSections = append(textureSections, textureSection{
-				sectionType: int(section.GetIntFieldByName("SectionType")),
-				x:           uint(section.GetIntFieldByName("X")),
-				y:           uint(section.GetIntFieldByName("Y")),
-				width:       uint(section.GetIntFieldByName("Width")),
-				height:      uint(section.GetIntFieldByName("Height")),
-			})
-		}
-
 	}
 	if fileDataId < 0 {
 		return nil
@@ -221,10 +198,12 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 		skel.FillModel(&mdl)
 	}
 
+	wow.loadConfigurationOptions(&mdl, *modelRecord)
+
 	return &mdl
 }
 
-func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelId int, textureSections []textureSection) {
+func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRecord) {
 	custOptionTable, err := wow.GetTable("ChrCustomizationOption")
 	if err != nil {
 		panic("no ChrCustomizationOption table")
@@ -245,13 +224,18 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelId int, text
 	if err != nil {
 		panic("no TextureFileData table")
 	}
+	textureSectionTable, err := wow.GetTable("CharComponentTextureSections")
+	if err != nil {
+		panic("no CharComponentTextureSections table")
+	}
 	textureLayerTable, err := wow.GetTable("ChrModelTextureLayer")
 	if err != nil {
 		panic("no ChrModelTextureLayer table")
 	}
 
-	var choices map[uint32]*model.ConfigurationChoice
-	for option := range custOptionTable.GetFixedRecordsByForeignKey(uint32(modelId)) {
+	mdl.Configurations = make(map[string][]model.ConfigurationChoice)
+	choices := make(map[uint32]*model.ConfigurationChoice)
+	for option := range custOptionTable.GetFixedRecordsByForeignKey(modelRecord.GetID()) {
 		optionName := option.GetStringFieldByName("Name_lang")
 
 		choiceRecords := make([]DBDRecord, 0)
@@ -266,7 +250,7 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelId int, text
 		for i, choice := range choiceRecords {
 			var color uint32 = 0
 			switch v := choice.GetFieldByName("SwatchColor").(type) {
-			case [2]int64:
+			case []int64:
 				color = uint32(v[0])
 			default:
 				panic("SwatchColor has unexpected type")
@@ -280,9 +264,16 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelId int, text
 		}
 	}
 
-	// cache all the texture layers
+	// cache all the texture sections for the layout
+	layoutId := uint32(modelRecord.GetIntFieldByName("CharComponentTextureLayoutID"))
+	var textureSections []DBDRecord
+	for textureSection := range textureSectionTable.GetFixedRecordsByForeignKey(layoutId) {
+		textureSections = append(textureSections, textureSection)
+	}
+
+	// cache all the texture layers for the layout
 	var textureLayers []DBDRecord
-	for textureLayer := range textureLayerTable.GetRecords {
+	for textureLayer := range textureLayerTable.GetFixedRecordsByForeignKey(layoutId) {
 		textureLayers = append(textureLayers, textureLayer)
 	}
 
@@ -303,17 +294,19 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelId int, text
 					textureTargetIds := textureLayer.GetFieldByName("ChrModelTextureTargetID")
 					var matched bool = false
 					switch ids := textureTargetIds.(type) {
-					case [2]int64:
+					case []int64:
 						matched = ids[0] == textureTargetId
 					}
 					if matched {
 						mask := textureLayer.GetIntFieldByName("TextureSectionTypeBitMask")
 						for _, textureSection := range textureSections {
-							if ((1 << textureSection.sectionType) & mask) != 0 {
-								materialFragment.X = textureSection.x
-								materialFragment.Y = textureSection.y
-								materialFragment.Width = textureSection.width
-								materialFragment.Height = textureSection.height
+							if ((1 << textureSection.GetIntFieldByName("SectionType")) & mask) != 0 {
+								materialFragment.X = uint(textureSection.GetIntFieldByName("X"))
+								materialFragment.Y = uint(textureSection.GetIntFieldByName("Y"))
+								materialFragment.Width = uint(textureSection.GetIntFieldByName("Width"))
+								materialFragment.Height = uint(textureSection.GetIntFieldByName("Height"))
+								materialFragment.Layer = uint(textureLayer.GetIntFieldByName("Layer"))
+								materialFragment.BlendMode = uint(textureLayer.GetIntFieldByName("BlendMode"))
 								break
 							}
 						}

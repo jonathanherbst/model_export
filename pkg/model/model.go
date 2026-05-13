@@ -74,9 +74,11 @@ type ConfigurationChoice struct {
 }
 
 type MaterialFragment struct {
-	Img    image.Image
-	X      uint
-	Y      uint
-	Width  uint
-	Height uint
+	Img       image.Image
+	X         uint
+	Y         uint
+	Width     uint
+	Height    uint
+	Layer     uint
+	BlendMode uint
 }
