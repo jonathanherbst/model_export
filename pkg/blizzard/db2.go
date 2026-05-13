@@ -201,9 +201,17 @@ func OpenDB2File(reader io.ReadSeekCloser) (*DB2File, error) {
 
 	// Read field storage infos
 	file.FieldStorageInfos = make([]WDC5FieldStorageInfo, file.Header.FieldCount)
+	file.AdditionalDataOffset = make([]uint, file.Header.FieldCount)
 	for i := range file.FieldStorageInfos {
 		if err := binary.Read(reader, binary.LittleEndian, &file.FieldStorageInfos[i]); err != nil {
 			return nil, errors.New("invalid WDC5 header")
+		}
+		if i != 0 {
+			if file.FieldStorageInfos[i-1].StorageType == FieldCompressionBitpackedIndexed || file.FieldStorageInfos[i-1].StorageType == FieldCompressionBitpackedIndexedArray {
+				file.AdditionalDataOffset[i] = file.AdditionalDataOffset[i-1] + uint(file.FieldStorageInfos[i-1].AdditionalDataSize)
+			} else {
+				file.AdditionalDataOffset[i] = file.AdditionalDataOffset[i-1]
+			}
 		}
 	}
 
@@ -227,13 +235,14 @@ func OpenDB2File(reader io.ReadSeekCloser) (*DB2File, error) {
 
 // File represents a WDC5 DB2 file
 type DB2File struct {
-	reader            io.ReadSeekCloser
-	Header            WDC5Header
-	Sections          []WDC5SectionHeader
-	FieldStructures   []WDC5FieldStructure
-	FieldStorageInfos []WDC5FieldStorageInfo
-	PalletData        []uint32
-	CommonData        map[uint32]uint32
+	reader               io.ReadSeekCloser
+	Header               WDC5Header
+	Sections             []WDC5SectionHeader
+	FieldStructures      []WDC5FieldStructure
+	FieldStorageInfos    []WDC5FieldStorageInfo
+	AdditionalDataOffset []uint
+	PalletData           []uint32
+	CommonData           map[uint32]uint32
 }
 
 func (file DB2File) Close() {
@@ -567,10 +576,12 @@ func (r DB2FixedRecord) getFieldWithID(index int) interface{} {
 		return r.data.GetSigned(uint(field.FieldOffsetBits), uint(field.FieldSizeBits))
 	case FieldCompressionBitpackedIndexed:
 		palletIndex := r.data.GetUnsigned(uint(field.FieldOffsetBits), uint(field.FieldSizeBits))
+		palletIndex += uint64(r.parent.parent.AdditionalDataOffset[index] / 4)
 		return r.parent.parent.PalletData[palletIndex]
 	case FieldCompressionBitpackedIndexedArray:
 		params := field.BitpackedIndexParams()
 		palletIndex := r.data.GetUnsigned(uint(field.FieldOffsetBits), uint(field.FieldSizeBits))
+		palletIndex += uint64(r.parent.parent.AdditionalDataOffset[index] / 4)
 		return r.parent.parent.PalletData[palletIndex : palletIndex+uint64(params.ArrayCount)]
 	case FieldCompressionCommonData:
 		if val, ok := r.parent.parent.CommonData[r.GetID()]; ok {
