@@ -201,17 +201,16 @@ func OpenDB2File(reader io.ReadSeekCloser) (*DB2File, error) {
 
 	// Read field storage infos
 	file.FieldStorageInfos = make([]WDC5FieldStorageInfo, file.Header.FieldCount)
-	file.AdditionalDataOffset = make([]uint, file.Header.FieldCount)
+	file.AdditionalDataOffset = make([]uint, file.Header.FieldCount+1)
 	for i := range file.FieldStorageInfos {
 		if err := binary.Read(reader, binary.LittleEndian, &file.FieldStorageInfos[i]); err != nil {
 			return nil, errors.New("invalid WDC5 header")
 		}
-		if i != 0 {
-			if file.FieldStorageInfos[i-1].StorageType == FieldCompressionBitpackedIndexed || file.FieldStorageInfos[i-1].StorageType == FieldCompressionBitpackedIndexedArray {
-				file.AdditionalDataOffset[i] = file.AdditionalDataOffset[i-1] + uint(file.FieldStorageInfos[i-1].AdditionalDataSize)
-			} else {
-				file.AdditionalDataOffset[i] = file.AdditionalDataOffset[i-1]
-			}
+
+		if file.FieldStorageInfos[i].StorageType == FieldCompressionBitpackedIndexed || file.FieldStorageInfos[i].StorageType == FieldCompressionBitpackedIndexedArray {
+			file.AdditionalDataOffset[i+1] = file.AdditionalDataOffset[i] + uint(file.FieldStorageInfos[i].AdditionalDataSize)
+		} else {
+			file.AdditionalDataOffset[i+1] = file.AdditionalDataOffset[i]
 		}
 	}
 
@@ -299,11 +298,11 @@ func (file *DB2File) GetFixedRecordsByForeignKey(id uint32) func(func(DB2FixedRe
 
 // Iterate all sections in the file
 func (file *DB2File) GetSections(yield func(DB2Section) bool) {
-	recordOffset := uint32(0)
+	recordIndex := uint32(0)
 	stringOffset := file.Header.RecordSize * file.Header.RecordCount
 	for _, header := range file.Sections {
 		// add here and subtract later so we don't miss a
-		recordOffset += header.RecordCount * file.Header.RecordSize
+		recordIndex += header.RecordCount
 		stringOffset += header.StringTableSize
 		if header.TactKeyHash != 0 {
 			// we don't know how to handle encrypted sections yet
@@ -314,7 +313,8 @@ func (file *DB2File) GetSections(yield func(DB2Section) bool) {
 			continue
 		}
 
-		stringIdxOffset := stringOffset - header.StringTableSize - (recordOffset - header.RecordCount*file.Header.RecordSize)
+		recordOffset := (recordIndex - header.RecordCount) * file.Header.RecordSize
+		stringIdxOffset := stringOffset - header.StringTableSize - recordOffset
 		section := DB2Section{parent: file, stringOffset: uint(stringIdxOffset)}
 
 		section.numRecords = header.RecordCount
@@ -580,7 +580,7 @@ func (r DB2FixedRecord) getFieldWithID(index int) interface{} {
 		return r.parent.parent.PalletData[palletIndex]
 	case FieldCompressionBitpackedIndexedArray:
 		params := field.BitpackedIndexParams()
-		palletIndex := r.data.GetUnsigned(uint(field.FieldOffsetBits), uint(field.FieldSizeBits))
+		palletIndex := (r.data.GetUnsigned(uint(field.FieldOffsetBits), uint(field.FieldSizeBits))) * uint64(params.ArrayCount)
 		palletIndex += uint64(r.parent.parent.AdditionalDataOffset[index] / 4)
 		return r.parent.parent.PalletData[palletIndex : palletIndex+uint64(params.ArrayCount)]
 	case FieldCompressionCommonData:

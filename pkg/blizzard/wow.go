@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -234,6 +235,10 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 	if err != nil {
 		panic("no ChrModelTextureLayer table")
 	}
+	chrModelMaterialTable, err := wow.GetTable("ChrModelMaterial")
+	if err != nil {
+		panic("no ChrModelMaterial table")
+	}
 
 	mdl.Configurations = make(map[string][]model.ConfigurationChoice)
 	choices := make(map[uint32]*model.ConfigurationChoice)
@@ -266,8 +271,9 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 		}
 	}
 
-	// cache all the texture sections for the layout
 	layoutId := uint32(modelRecord.GetIntFieldByName("CharComponentTextureLayoutID"))
+
+	// cache all the texture sections for the layout
 	var textureSections []DBDRecord
 	for textureSection := range textureSectionTable.GetFixedRecordsByForeignKey(layoutId) {
 		textureSections = append(textureSections, textureSection)
@@ -277,6 +283,12 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 	var textureLayers []DBDRecord
 	for textureLayer := range textureLayerTable.GetFixedRecordsByForeignKey(layoutId) {
 		textureLayers = append(textureLayers, textureLayer)
+	}
+
+	// cache all the model materials
+	var modelMaterials []DBDRecord
+	for modelMaterial := range chrModelMaterialTable.GetFixedRecordsByForeignKey(layoutId) {
+		modelMaterials = append(modelMaterials, modelMaterial)
 	}
 
 	for custElement := range custElementTable.GetRecords {
@@ -300,18 +312,30 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 						matched = ids[0] == textureTargetId
 					}
 					if matched {
+						materialFragment.Layer = uint(textureLayer.GetIntFieldByName("Layer"))
+						materialFragment.BlendMode = uint(textureLayer.GetIntFieldByName("BlendMode"))
+
 						mask := textureLayer.GetIntFieldByName("TextureSectionTypeBitMask")
-						for _, textureSection := range textureSections {
-							if ((1 << textureSection.GetIntFieldByName("SectionType")) & mask) != 0 {
-								materialFragment.X = uint(textureSection.GetIntFieldByName("X"))
-								materialFragment.Y = uint(textureSection.GetIntFieldByName("Y"))
-								materialFragment.Width = uint(textureSection.GetIntFieldByName("Width"))
-								materialFragment.Height = uint(textureSection.GetIntFieldByName("Height"))
-								materialFragment.Layer = uint(textureLayer.GetIntFieldByName("Layer"))
-								materialFragment.BlendMode = uint(textureLayer.GetIntFieldByName("BlendMode"))
-								break
+						textureType := textureLayer.GetIntFieldByName("TextureType")
+						modelMatIdx := slices.IndexFunc(modelMaterials, func(r DBDRecord) bool { return r.GetIntFieldByName("TextureType") == textureType })
+						if mask == -1 {
+							materialFragment.X = 0
+							materialFragment.Y = 0
+							materialFragment.Width = uint(modelMaterials[modelMatIdx].GetIntFieldByName("Width"))
+							materialFragment.Height = uint(modelMaterials[modelMatIdx].GetIntFieldByName("Height"))
+						} else {
+							for _, textureSection := range textureSections {
+								sectionType := textureSection.GetIntFieldByName("SectionType")
+								if ((1 << sectionType) & mask) != 0 {
+									materialFragment.X = uint(textureSection.GetIntFieldByName("X"))
+									materialFragment.Y = uint(textureSection.GetIntFieldByName("Y"))
+									materialFragment.Width = uint(textureSection.GetIntFieldByName("Width"))
+									materialFragment.Height = uint(textureSection.GetIntFieldByName("Height"))
+									break
+								}
 							}
 						}
+						break
 					}
 				}
 
