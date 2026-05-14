@@ -220,10 +220,12 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 	if err != nil {
 		panic("no ChrCustomizationMaterial table")
 	}
+	custMaterialCache := custMaterialTable.Cache()
 	textureFileDataTable, err := wow.GetTable("TextureFileData")
 	if err != nil {
 		panic("no TextureFileData table")
 	}
+	textureFileDataCache := textureFileDataTable.Cache()
 	textureSectionTable, err := wow.GetTable("CharComponentTextureSections")
 	if err != nil {
 		panic("no CharComponentTextureSections table")
@@ -286,7 +288,7 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 			}
 
 			materialId := uint32(custElement.GetIntFieldByName("ChrCustomizationMaterialID"))
-			material := custMaterialTable.GetFixedRecordById(materialId)
+			material := custMaterialCache.GetFixedRecordById(materialId)
 			if material != nil {
 				var materialFragment model.MaterialFragment
 				textureTargetId := material.GetIntFieldByName("ChrModelTextureTargetID")
@@ -314,7 +316,7 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 				}
 
 				resourcesId := material.GetIntFieldByName("MaterialResourcesID")
-				for textureFileData := range textureFileDataTable.GetFixedRecordsByForeignKey(uint32(resourcesId)) {
+				for textureFileData := range textureFileDataCache.GetFixedRecordsByForeignKey(uint32(resourcesId)) {
 					// what do I do with multiple texture file datas?
 					if textureFile, err := wow.Casc.OpenFileById(textureFileData.GetID(), false); err == nil {
 						if blp, err := BLPFromReader(textureFile); err == nil {

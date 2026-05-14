@@ -69,6 +69,67 @@ func (table DBDTable) GetFixedRecordsByForeignKey(id uint32) func(func(DBDRecord
 	}
 }
 
+func (table DBDTable) Cache() CachedDBDTable {
+	cache := CachedDBDTable{
+		records:    make(map[uint32]DBDRecord),
+		foregnKeys: make(map[uint32][]uint32),
+	}
+
+	for section := range table.database.GetSections {
+		for record := range section.FixedRecords {
+			cache.records[record.GetID()] = DBDRecord{table.Schema, record}
+		}
+		for key, ids := range section.foreignKeyMap {
+			if section.parent.HasNonInlineIDs() {
+				cache.foregnKeys[key] = ids
+			} else {
+				cache.foregnKeys[key] = make([]uint32, len(ids))
+				for i, idx := range ids {
+					cache.foregnKeys[key][i] = section.GetFixedRecord(int(idx)).GetID()
+				}
+			}
+		}
+	}
+
+	return cache
+}
+
+type CachedDBDTable struct {
+	records    map[uint32]DBDRecord
+	foregnKeys map[uint32][]uint32
+}
+
+func (table CachedDBDTable) GetFixedRecordById(id uint32) *DBDRecord {
+	if record, ok := table.records[id]; ok {
+		return &record
+	}
+	return nil
+}
+
+func (table CachedDBDTable) GetRecords() func(func(DBDRecord) bool) {
+	return func(yield func(DBDRecord) bool) {
+		for _, record := range table.records {
+			if !yield(record) {
+				return
+			}
+		}
+	}
+}
+
+func (table CachedDBDTable) GetFixedRecordsByForeignKey(id uint32) func(func(DBDRecord) bool) {
+	return func(yield func(DBDRecord) bool) {
+		for _, recordId := range table.foregnKeys[id] {
+			if record, ok := table.records[recordId]; ok {
+				if !yield(record) {
+					return
+				}
+			} else {
+				panic("foreign key points to unknown record")
+			}
+		}
+	}
+}
+
 type DBDRecord struct {
 	Schema DBDSchema
 	record DB2FixedRecord
