@@ -16,7 +16,9 @@ type Model struct {
 	Skin              *Skin
 	Skeleton          *Skeleton
 	Animations        []Animation
-	Configurations    map[string][]ConfigurationChoice
+	Configurations    []ConfigurationComponent
+	Textures          []Texture
+	Images            []image.Image
 }
 
 type RenderProcess int
@@ -67,18 +69,28 @@ const (
 )
 
 type ConfigurationChoice struct {
-	Name     string
-	Color    uint32
-	Material *MaterialFragment
-	GeosetId int
+	Name       string
+	Color      uint32
+	OptionName string
 }
 
-type MaterialFragment struct {
-	Img       image.Image
-	X         uint
-	Y         uint
-	Width     uint
-	Height    uint
-	Layer     uint
-	BlendMode uint
+type ConfigurationComponent struct {
+	Configurations   []ConfigurationChoice
+	Geosets          []int
+	TextureFragments []TextureFragment
+}
+
+type Texture struct {
+	Width  uint
+	Height uint
+}
+
+type TextureFragment struct {
+	Texture int
+	Img     int
+	X       uint
+	Y       uint
+	Width   uint
+	Height  uint
+	Layer   uint
 }

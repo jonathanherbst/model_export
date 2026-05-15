@@ -434,7 +434,7 @@ func (section *DB2Section) GetFixedRecordById(id uint32) *DB2FixedRecord {
 		} else {
 			idx = sort.Search(len(section.idList), func(i int) bool { return section.idList[i] >= id })
 		}
-		if idx < len(section.idList) && section.idList[idx] == id {
+		if idx < len(section.idList) {
 			record := section.GetFixedRecord(idx)
 			record.id = &id
 			return &record

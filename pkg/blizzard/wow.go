@@ -239,9 +239,23 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 	if err != nil {
 		panic("no ChrModelMaterial table")
 	}
+	textureLayoutsTable, err := wow.GetTable("CharComponentTextureLayouts")
+	if err != nil {
+		panic("no CharComponentTextureLayouts table")
+	}
 
-	mdl.Configurations = make(map[string][]model.ConfigurationChoice)
-	choices := make(map[uint32]*model.ConfigurationChoice)
+	layoutId := uint32(modelRecord.GetIntFieldByName("CharComponentTextureLayoutID"))
+	layout := textureLayoutsTable.GetFixedRecordById(layoutId)
+	if layout == nil {
+		panic("model has unknown layout id")
+	}
+	textureIdx := len(mdl.Textures)
+	mdl.Textures = append(mdl.Textures, model.Texture{
+		Width:  uint(layout.GetIntFieldByName("Width")),
+		Height: uint(layout.GetIntFieldByName("Height")),
+	})
+
+	choices := make(map[uint32]model.ConfigurationChoice)
 	for option := range custOptionTable.GetFixedRecordsByForeignKey(modelRecord.GetID()) {
 		optionName := option.GetStringFieldByName("Name_lang")
 
@@ -253,8 +267,7 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 			return choiceRecords[i].GetIntFieldByName("OrderIndex") < choiceRecords[j].GetIntFieldByName("OrderIndex")
 		})
 
-		mdl.Configurations[optionName] = make([]model.ConfigurationChoice, len(choiceRecords))
-		for i, choice := range choiceRecords {
+		for _, choice := range choiceRecords {
 			var color uint32 = 0
 			switch v := choice.GetFieldByName("SwatchColor").(type) {
 			case []int64:
@@ -263,15 +276,13 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 				panic("SwatchColor has unexpected type")
 			}
 
-			mdl.Configurations[optionName][i] = model.ConfigurationChoice{
-				Name:  choice.GetStringFieldByName("Name_lang"),
-				Color: color,
+			choices[choice.GetID()] = model.ConfigurationChoice{
+				Name:       choice.GetStringFieldByName("Name_lang"),
+				Color:      color,
+				OptionName: optionName,
 			}
-			choices[choice.GetID()] = &mdl.Configurations[optionName][i]
 		}
 	}
-
-	layoutId := uint32(modelRecord.GetIntFieldByName("CharComponentTextureLayoutID"))
 
 	// cache all the texture sections for the layout
 	var textureSections []DBDRecord
@@ -291,18 +302,33 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 		modelMaterials = append(modelMaterials, modelMaterial)
 	}
 
+	imageMap := make(map[uint32]int)
+
 	for custElement := range custElementTable.GetRecords {
 		choiceId := uint32(custElement.GetIntFieldByName("ChrCustomizationChoiceID"))
 		if choice, ok := choices[choiceId]; ok {
+			component := model.ConfigurationComponent{
+				Configurations:   []model.ConfigurationChoice{choice},
+				Geosets:          make([]int, 0),
+				TextureFragments: make([]model.TextureFragment, 0),
+			}
+
+			relatedChoiceId := uint32(custElement.GetIntFieldByName("RelatedChrCustomizationChoiceID"))
+			if choice, ok := choices[relatedChoiceId]; ok {
+				component.Configurations = append(component.Configurations, choice)
+			}
+
 			geosetId := int(custElement.GetIntFieldByName("ChrCustomizationGeosetID"))
 			if geosetId > 0 {
-				choice.GeosetId = geosetId
+				component.Geosets = append(component.Geosets, geosetId)
 			}
 
 			materialId := uint32(custElement.GetIntFieldByName("ChrCustomizationMaterialID"))
 			material := custMaterialCache.GetFixedRecordById(materialId)
 			if material != nil {
-				var materialFragment model.MaterialFragment
+				materialFragment := model.TextureFragment{
+					Texture: textureIdx,
+				}
 				textureTargetId := material.GetIntFieldByName("ChrModelTextureTargetID")
 				for _, textureLayer := range textureLayers {
 					textureTargetIds := textureLayer.GetFieldByName("ChrModelTextureTargetID")
@@ -313,7 +339,6 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 					}
 					if matched {
 						materialFragment.Layer = uint(textureLayer.GetIntFieldByName("Layer"))
-						materialFragment.BlendMode = uint(textureLayer.GetIntFieldByName("BlendMode"))
 
 						mask := textureLayer.GetIntFieldByName("TextureSectionTypeBitMask")
 						textureType := textureLayer.GetIntFieldByName("TextureType")
@@ -341,19 +366,27 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 
 				resourcesId := material.GetIntFieldByName("MaterialResourcesID")
 				for textureFileData := range textureFileDataCache.GetFixedRecordsByForeignKey(uint32(resourcesId)) {
-					// what do I do with multiple texture file datas?
-					if textureFile, err := wow.Casc.OpenFileById(textureFileData.GetID(), false); err == nil {
-						if blp, err := BLPFromReader(textureFile); err == nil {
-							if img, err := blp.Decode(0); err == nil {
-								materialFragment.Img = img
-								break
+					textureFileId := textureFileData.GetID()
+					if idx, ok := imageMap[textureFileId]; ok {
+						materialFragment.Img = idx
+					} else {
+						// what do I do with multiple texture file datas?
+						if textureFile, err := wow.Casc.OpenFileById(textureFileData.GetID(), false); err == nil {
+							if blp, err := BLPFromReader(textureFile); err == nil {
+								if img, err := blp.Decode(0); err == nil {
+									imgIdx := len(mdl.Images)
+									mdl.Images = append(mdl.Images, img)
+									imageMap[textureFileId] = imgIdx
+									materialFragment.Img = imgIdx
+									break
+								}
 							}
 						}
 					}
 				}
-
-				choice.Material = &materialFragment
+				component.TextureFragments = append(component.TextureFragments, materialFragment)
 			}
+			mdl.Configurations = append(mdl.Configurations, component)
 		}
 	}
 }
