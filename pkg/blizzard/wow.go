@@ -279,6 +279,7 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 			choices[choice.GetID()] = model.ConfigurationChoice{
 				Name:       choice.GetStringFieldByName("Name_lang"),
 				Color:      color,
+				OrderIndex: uint(choice.GetIntFieldByName("OrderIndex")),
 				OptionName: optionName,
 			}
 		}

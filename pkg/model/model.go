@@ -71,6 +71,7 @@ const (
 type ConfigurationChoice struct {
 	Name       string
 	Color      uint32
+	OrderIndex uint
 	OptionName string
 }
 

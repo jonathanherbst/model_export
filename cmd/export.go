@@ -5,9 +5,13 @@ package cmd
 
 import (
 	"fmt"
+	"image"
+	"image/draw"
+	"image/png"
 	"jph/model-export/pkg/blizzard"
 	"jph/model-export/pkg/model"
 	"os"
+	"sort"
 
 	"github.com/spf13/cobra"
 )
@@ -26,6 +30,11 @@ var exportCmd = &cobra.Command{
 		glb_path, err := cmd.Flags().GetString("glb")
 		if err != nil {
 			panic("no glb flag")
+		}
+
+		tex_path, err := cmd.Flags().GetString("tex")
+		if err != nil {
+			panic("no tex flag")
 		}
 
 		var modelName *string = nil
@@ -65,6 +74,8 @@ var exportCmd = &cobra.Command{
 
 				if glb_path != "" && modelName != nil {
 					wowExportModel(wow, glb_path, *modelName, gender)
+				} else if tex_path != "" && modelName != nil {
+					wowExportTex(wow, tex_path, *modelName, gender)
 				} else {
 					wowPrintRaces(wow)
 				}
@@ -99,8 +110,63 @@ func wowExportModel(wow *blizzard.WOWCasc, path string, modelName string, gender
 	model.ExportGLTF(*mdl, path)
 }
 
+func wowExportTex(wow *blizzard.WOWCasc, path string, modelName string, gender *int) {
+	modelId := wow.FindRaceModelId(modelName, gender)
+	if modelId == nil {
+		fmt.Fprintln(os.Stderr, "Failed to find the model id")
+		os.Exit(1)
+	}
+
+	mdl := wow.LoadModelFromId(*modelId)
+	if mdl == nil {
+		fmt.Fprintln(os.Stderr, "Failed to load the model")
+		os.Exit(1)
+	}
+
+	selectedOptions := make(map[string]model.ConfigurationChoice)
+	for _, component := range mdl.Configurations {
+		for _, choice := range component.Configurations {
+			if currentChoice, ok := selectedOptions[choice.OptionName]; ok {
+				if choice.OrderIndex < currentChoice.OrderIndex {
+					selectedOptions[choice.OptionName] = choice
+				}
+			} else {
+				selectedOptions[choice.OptionName] = choice
+			}
+		}
+	}
+
+	textureFrags := make([]model.TextureFragment, 0)
+	for _, component := range mdl.Configurations {
+		selected := true
+		for _, choice := range component.Configurations {
+			selected = selected && selectedOptions[choice.OptionName].OrderIndex == choice.OrderIndex
+		}
+		if selected && len(component.TextureFragments) > 0 {
+			for _, frag := range component.TextureFragments {
+				textureFrags = append(textureFrags, frag)
+			}
+		}
+	}
+	sort.Slice(textureFrags, func(i, j int) bool { return textureFrags[i].Layer < textureFrags[j].Layer })
+
+	texture := image.NewRGBA(image.Rect(0, 0, int(mdl.Textures[0].Width), int(mdl.Textures[0].Height)))
+	for _, frag := range textureFrags {
+		img := mdl.Images[frag.Img]
+		draw.Draw(texture, image.Rect(0, 0, int(frag.Width), int(frag.Height)), img, image.Pt(int(frag.X), int(frag.Y)), draw.Over)
+	}
+	texFile, err := os.Create(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to open tex file: %v\n", err)
+		os.Exit(2)
+	}
+	png.Encode(texFile, texture)
+	texFile.Close()
+}
+
 func init() {
 	rootCmd.AddCommand(exportCmd)
 	exportCmd.Flags().String("casc", "", "Path to a casc")
 	exportCmd.Flags().String("glb", "", "Path to export the glb of the specified model")
+	exportCmd.Flags().String("tex", "", "Export the default combined texture")
 }
