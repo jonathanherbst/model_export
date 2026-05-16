@@ -6,7 +6,6 @@ package cmd
 import (
 	"fmt"
 	"image"
-	"image/draw"
 	"image/png"
 	"jph/model-export/pkg/blizzard"
 	"jph/model-export/pkg/model"
@@ -14,6 +13,7 @@ import (
 	"sort"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/image/draw"
 )
 
 // exportCmd represents the exportchar command
@@ -136,24 +136,48 @@ func wowExportTex(wow *blizzard.WOWCasc, path string, modelName string, gender *
 		}
 	}
 
-	textureFrags := make([]model.TextureFragment, 0)
-	for _, component := range mdl.Configurations {
+	os.RemoveAll("texture")
+	os.Mkdir("texture", 0750)
+	selectedComponents := make([]model.ConfigurationComponent, 0)
+	for i, component := range mdl.Configurations {
 		selected := true
+		optionString := ""
 		for _, choice := range component.Configurations {
 			selected = selected && selectedOptions[choice.OptionName].OrderIndex == choice.OrderIndex
+			optionString += fmt.Sprintf("%s(%s-%08X-%d)", choice.OptionName, choice.Name, choice.Color, choice.OrderIndex)
 		}
 		if selected && len(component.TextureFragments) > 0 {
+			selectedComponents = append(selectedComponents, component)
+
 			for _, frag := range component.TextureFragments {
-				textureFrags = append(textureFrags, frag)
+				texName := fmt.Sprintf("texture/%d-%s.png", i, optionString)
+				file, err := os.Create(texName)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to open texture file: %v\n", err)
+					os.Exit(2)
+				}
+				png.Encode(file, mdl.Images[frag.Img])
+				file.Close()
 			}
+		}
+	}
+
+	textureFrags := make([]model.TextureFragment, 0)
+	for _, component := range selectedComponents {
+		for _, frag := range component.TextureFragments {
+			textureFrags = append(textureFrags, frag)
 		}
 	}
 	sort.Slice(textureFrags, func(i, j int) bool { return textureFrags[i].Layer < textureFrags[j].Layer })
 
 	texture := image.NewRGBA(image.Rect(0, 0, int(mdl.Textures[0].Width), int(mdl.Textures[0].Height)))
 	for _, frag := range textureFrags {
-		img := mdl.Images[frag.Img]
-		draw.Draw(texture, image.Rect(0, 0, int(frag.Width), int(frag.Height)), img, image.Pt(int(frag.X), int(frag.Y)), draw.Over)
+		texImg := mdl.Images[frag.Img]
+		// need to resize the image to the fragment size
+		img := image.NewRGBA(image.Rect(0, 0, int(frag.Width), int(frag.Height)))
+		draw.BiLinear.Scale(img, img.Rect, texImg, texImg.Bounds(), draw.Over, nil)
+		rect := img.Bounds().Add(image.Point{int(frag.X), int(frag.Y)})
+		draw.Draw(texture, rect, img, image.Point{0, 0}, draw.Over)
 	}
 	texFile, err := os.Create(path)
 	if err != nil {
