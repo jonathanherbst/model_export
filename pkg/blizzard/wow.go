@@ -339,7 +339,10 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 						matched = ids[0] == textureTargetId
 					}
 					if matched {
-						materialFragment.Layer = uint(textureLayer.GetIntFieldByName("Layer"))
+						// I wonder if thie should be textureTargetId or the Layer field
+						materialFragment.Layer = uint(textureTargetId)
+						//materialFragment.Layer = uint(textureLayer.GetIntFieldByName("Layer"))
+						materialFragment.BlendMode = convertBlendMode(textureLayer.GetIntFieldByName("BlendMode"))
 
 						mask := textureLayer.GetIntFieldByName("TextureSectionTypeBitMask")
 						textureType := textureLayer.GetIntFieldByName("TextureType")
@@ -467,4 +470,18 @@ func computeFileSHA256(filePath string) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
+}
+
+func convertBlendMode(blendMode int64) model.BlendMode {
+	// It might be a better idea to actually encode all the blend modes here, maybe in terms of glBlend parameters?
+	switch blendMode {
+	case 0:
+		return model.BlendModeNone
+	case 1, 4, 6, 7, 15, 16: // Blit, Multiply, Overlay, Screen, InferAlphaBlend, Unknown
+		return model.BlendModeInferAlphaBlend
+	case 9:
+		return model.BlendModeAlphaStraight
+	default:
+		panic(fmt.Sprintf("unsupported blend mode: %d", blendMode))
+	}
 }

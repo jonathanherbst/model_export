@@ -87,11 +87,20 @@ type Texture struct {
 }
 
 type TextureFragment struct {
-	Texture int
-	Img     int
-	X       uint
-	Y       uint
-	Width   uint
-	Height  uint
-	Layer   uint
+	Texture   int
+	Img       int
+	X         uint
+	Y         uint
+	Width     uint
+	Height    uint
+	Layer     uint
+	BlendMode BlendMode
 }
+
+type BlendMode int
+
+const (
+	BlendModeNone BlendMode = iota
+	BlendModeInferAlphaBlend
+	BlendModeAlphaStraight
+)
