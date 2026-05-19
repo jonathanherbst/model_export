@@ -17,7 +17,7 @@ type Model struct {
 	Skeleton          *Skeleton
 	Animations        []Animation
 	Configurations    []ConfigurationComponent
-	Textures          []Texture
+	Materials         []Material
 	Images            []image.Image
 }
 
@@ -81,20 +81,20 @@ type ConfigurationComponent struct {
 	TextureFragments []TextureFragment
 }
 
-type Texture struct {
+type Material struct {
 	Width  uint
 	Height uint
 }
 
 type TextureFragment struct {
-	Texture   int
-	Img       int
-	X         uint
-	Y         uint
-	Width     uint
-	Height    uint
-	Layer     uint
-	BlendMode BlendMode
+	MaterialIdx int
+	Img         int
+	X           uint
+	Y           uint
+	Width       uint
+	Height      uint
+	Layer       uint
+	BlendMode   BlendMode
 }
 
 type BlendMode int

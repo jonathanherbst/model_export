@@ -249,11 +249,6 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 	if layout == nil {
 		panic("model has unknown layout id")
 	}
-	textureIdx := len(mdl.Textures)
-	mdl.Textures = append(mdl.Textures, model.Texture{
-		Width:  uint(layout.GetIntFieldByName("Width")),
-		Height: uint(layout.GetIntFieldByName("Height")),
-	})
 
 	choices := make(map[uint32]model.ConfigurationChoice)
 	for option := range custOptionTable.GetFixedRecordsByForeignKey(modelRecord.GetID()) {
@@ -299,8 +294,13 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 
 	// cache all the model materials
 	var modelMaterials []DBDRecord
+	mdl.Materials = make([]model.Material, 0)
 	for modelMaterial := range chrModelMaterialTable.GetFixedRecordsByForeignKey(layoutId) {
 		modelMaterials = append(modelMaterials, modelMaterial)
+		mdl.Materials = append(mdl.Materials, model.Material{
+			Width:  uint(modelMaterial.GetIntFieldByName("Width")),
+			Height: uint(modelMaterial.GetIntFieldByName("Height")),
+		})
 	}
 
 	imageMap := make(map[uint32]int)
@@ -327,9 +327,7 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 			materialId := uint32(custElement.GetIntFieldByName("ChrCustomizationMaterialID"))
 			material := custMaterialCache.GetFixedRecordById(materialId)
 			if material != nil {
-				materialFragment := model.TextureFragment{
-					Texture: textureIdx,
-				}
+				var materialFragment model.TextureFragment
 				textureTargetId := material.GetIntFieldByName("ChrModelTextureTargetID")
 				for _, textureLayer := range textureLayers {
 					textureTargetIds := textureLayer.GetFieldByName("ChrModelTextureTargetID")
@@ -347,6 +345,7 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 						mask := textureLayer.GetIntFieldByName("TextureSectionTypeBitMask")
 						textureType := textureLayer.GetIntFieldByName("TextureType")
 						modelMatIdx := slices.IndexFunc(modelMaterials, func(r DBDRecord) bool { return r.GetIntFieldByName("TextureType") == textureType })
+						materialFragment.MaterialIdx = modelMatIdx
 						if mask == -1 {
 							materialFragment.X = 0
 							materialFragment.Y = 0

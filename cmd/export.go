@@ -10,6 +10,7 @@ import (
 	"jph/model-export/pkg/blizzard"
 	"jph/model-export/pkg/model"
 	"os"
+	"path/filepath"
 	"sort"
 
 	"github.com/spf13/cobra"
@@ -32,9 +33,9 @@ var exportCmd = &cobra.Command{
 			panic("no glb flag")
 		}
 
-		tex_path, err := cmd.Flags().GetString("tex")
+		mat_path, err := cmd.Flags().GetString("mat")
 		if err != nil {
-			panic("no tex flag")
+			panic("no mat flag")
 		}
 
 		var modelName *string = nil
@@ -72,10 +73,13 @@ var exportCmd = &cobra.Command{
 					os.Exit(1)
 				}
 
-				if glb_path != "" && modelName != nil {
-					wowExportModel(wow, glb_path, *modelName, gender)
-				} else if tex_path != "" && modelName != nil {
-					wowExportTex(wow, tex_path, *modelName, gender)
+				if modelName != nil {
+					mdl := wowLoadModel(wow, *modelName, gender)
+					if glb_path != "" {
+						model.ExportGLTF(mdl, glb_path)
+					} else if mat_path != "" {
+						wowExportMat(mdl, mat_path)
+					}
 				} else {
 					wowPrintRaces(wow)
 				}
@@ -94,7 +98,7 @@ func wowPrintRaces(wow *blizzard.WOWCasc) {
 	}
 }
 
-func wowExportModel(wow *blizzard.WOWCasc, path string, modelName string, gender *int) {
+func wowLoadModel(wow *blizzard.WOWCasc, modelName string, gender *int) model.Model {
 	modelId := wow.FindRaceModelId(modelName, gender)
 	if modelId == nil {
 		fmt.Fprintln(os.Stderr, "Failed to find the model id")
@@ -107,22 +111,10 @@ func wowExportModel(wow *blizzard.WOWCasc, path string, modelName string, gender
 		os.Exit(1)
 	}
 
-	model.ExportGLTF(*mdl, path)
+	return *mdl
 }
 
-func wowExportTex(wow *blizzard.WOWCasc, path string, modelName string, gender *int) {
-	modelId := wow.FindRaceModelId(modelName, gender)
-	if modelId == nil {
-		fmt.Fprintln(os.Stderr, "Failed to find the model id")
-		os.Exit(1)
-	}
-
-	mdl := wow.LoadModelFromId(*modelId)
-	if mdl == nil {
-		fmt.Fprintln(os.Stderr, "Failed to load the model")
-		os.Exit(1)
-	}
-
+func wowExportTex(mdl model.Model, path string) {
 	selectedOptions := make(map[string]model.ConfigurationChoice)
 	for _, component := range mdl.Configurations {
 		for _, choice := range component.Configurations {
@@ -136,9 +128,7 @@ func wowExportTex(wow *blizzard.WOWCasc, path string, modelName string, gender *
 		}
 	}
 
-	os.RemoveAll("texture")
-	os.Mkdir("texture", 0750)
-	selectedComponents := make([]model.ConfigurationComponent, 0)
+	os.Mkdir(path, 0750)
 	for i, component := range mdl.Configurations {
 		selected := true
 		optionString := ""
@@ -147,10 +137,8 @@ func wowExportTex(wow *blizzard.WOWCasc, path string, modelName string, gender *
 			optionString += fmt.Sprintf("%s(%s-%08X-%d)", choice.OptionName, choice.Name, choice.Color, choice.OrderIndex)
 		}
 		if selected && len(component.TextureFragments) > 0 {
-			selectedComponents = append(selectedComponents, component)
-
 			for _, frag := range component.TextureFragments {
-				texName := fmt.Sprintf("texture/%d-%s.png", i, optionString)
+				texName := filepath.Join(path, fmt.Sprintf("%d-%s.png", i, optionString))
 				file, err := os.Create(texName)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "failed to open texture file: %v\n", err)
@@ -159,6 +147,33 @@ func wowExportTex(wow *blizzard.WOWCasc, path string, modelName string, gender *
 				png.Encode(file, mdl.Images[frag.Img])
 				file.Close()
 			}
+		}
+	}
+}
+
+func wowExportMat(mdl model.Model, path string) {
+	selectedOptions := make(map[string]model.ConfigurationChoice)
+	for _, component := range mdl.Configurations {
+		for _, choice := range component.Configurations {
+			if currentChoice, ok := selectedOptions[choice.OptionName]; ok {
+				if choice.OrderIndex < currentChoice.OrderIndex {
+					selectedOptions[choice.OptionName] = choice
+				}
+			} else {
+				selectedOptions[choice.OptionName] = choice
+			}
+		}
+	}
+
+	os.Mkdir(path, 0750)
+	selectedComponents := make([]model.ConfigurationComponent, 0)
+	for _, component := range mdl.Configurations {
+		selected := true
+		for _, choice := range component.Configurations {
+			selected = selected && selectedOptions[choice.OptionName].OrderIndex == choice.OrderIndex
+		}
+		if selected && len(component.TextureFragments) > 0 {
+			selectedComponents = append(selectedComponents, component)
 		}
 	}
 
@@ -170,27 +185,35 @@ func wowExportTex(wow *blizzard.WOWCasc, path string, modelName string, gender *
 	}
 	sort.Slice(textureFrags, func(i, j int) bool { return textureFrags[i].Layer < textureFrags[j].Layer })
 
-	texture := image.NewRGBA(image.Rect(0, 0, int(mdl.Textures[0].Width), int(mdl.Textures[0].Height)))
-	for _, frag := range textureFrags {
-		texImg := mdl.Images[frag.Img]
-		// need to resize the image to the fragment size
-		img := image.NewRGBA(image.Rect(0, 0, int(frag.Width), int(frag.Height)))
-		draw.BiLinear.Scale(img, img.Rect, texImg, texImg.Bounds(), draw.Over, nil)
-		rect := img.Bounds().Add(image.Point{int(frag.X), int(frag.Y)})
-		draw.Draw(texture, rect, img, image.Point{0, 0}, draw.Over)
+	for matIdx, mat := range mdl.Materials {
+		texture := image.NewRGBA(image.Rect(0, 0, int(mat.Width), int(mat.Height)))
+		for _, frag := range textureFrags {
+			if frag.MaterialIdx == matIdx {
+				texImg := mdl.Images[frag.Img]
+				// need to resize the image to the fragment size
+				img := image.NewRGBA(image.Rect(0, 0, int(frag.Width), int(frag.Height)))
+				draw.BiLinear.Scale(img, img.Rect, texImg, texImg.Bounds(), draw.Over, nil)
+				rect := img.Bounds().Add(image.Point{int(frag.X), int(frag.Y)})
+				draw.Draw(texture, rect, img, image.Point{0, 0}, draw.Over)
+			}
+		}
+
+		matPath := filepath.Join(path, fmt.Sprintf("mat-%d.png", matIdx))
+		matFile, err := os.Create(matPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to open mat file: %v\n", err)
+			os.Exit(2)
+		}
+		png.Encode(matFile, texture)
+		matFile.Close()
+
 	}
-	texFile, err := os.Create(path)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to open tex file: %v\n", err)
-		os.Exit(2)
-	}
-	png.Encode(texFile, texture)
-	texFile.Close()
+
 }
 
 func init() {
 	rootCmd.AddCommand(exportCmd)
 	exportCmd.Flags().String("casc", "", "Path to a casc")
 	exportCmd.Flags().String("glb", "", "Path to export the glb of the specified model")
-	exportCmd.Flags().String("tex", "", "Export the default combined texture")
+	exportCmd.Flags().String("mat", "", "Directory to export default materials")
 }
