@@ -16,8 +16,9 @@ type Model struct {
 	Skin              *Skin
 	Skeleton          *Skeleton
 	Animations        []Animation
-	Configurations    []ConfigurationComponent
-	Materials         []Material
+	Choices           []ConfigChoice
+	Elements          []ConfigElement
+	SegmentedTextures []Texture
 	Images            []image.Image
 }
 
@@ -68,39 +69,34 @@ const (
 	InterpolationCubicHermite
 )
 
-type ConfigurationChoice struct {
-	Name       string
-	Color      uint32
-	OrderIndex uint
-	OptionName string
+type TextureSegment struct {
+	X         uint   `json:"x"`
+	Y         uint   `json:"y"`
+	Width     uint   `json:"width"`
+	Height    uint   `json:"height"`
+	BlendMode string `json:"blend_mode"`
 }
 
-type ConfigurationComponent struct {
-	Configurations   []ConfigurationChoice
-	Geosets          []int
-	TextureFragments []TextureFragment
+type Texture struct {
+	Width    uint             `json:"width"`
+	Height   uint             `json:"height"`
+	Segments []TextureSegment `json:"segments"`
 }
 
-type Material struct {
-	Width  uint
-	Height uint
+type ConfigChoice struct {
+	Option string `json:"option"`
+	Choice string `json:"choice"`
+	Color  uint32 `json:"color"`
 }
 
-type TextureFragment struct {
-	MaterialIdx int
-	Img         int
-	X           uint
-	Y           uint
-	Width       uint
-	Height      uint
-	Layer       uint
-	BlendMode   BlendMode
+type ElementMaterial struct {
+	MaterialIdx int `json:"material"`
+	SegmentIdx  int `json:"segment"`
+	ImageIdx    int `json:"image"`
 }
 
-type BlendMode int
-
-const (
-	BlendModeNone BlendMode = iota
-	BlendModeInferAlphaBlend
-	BlendModeAlphaStraight
-)
+type ConfigElement struct {
+	ChoiceIdxes []int             `json:"choices"`
+	Materials   []ElementMaterial `json:"materials"`
+	MeshIdxes   []int             `json:"meshes"`
+}

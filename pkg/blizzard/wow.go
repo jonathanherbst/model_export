@@ -213,6 +213,7 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 	if err != nil {
 		panic("no ChrCustomizationChoice table")
 	}
+	custChoicesCache := custChoicesTable.Cache()
 	custElementTable, err := wow.GetTable("ChrCustomizationElement")
 	if err != nil {
 		panic("no ChrCustomizationElement table")
@@ -250,12 +251,13 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 		panic("model has unknown layout id")
 	}
 
-	choices := make(map[uint32]model.ConfigurationChoice)
+	mdl.Choices = make([]model.ConfigChoice, 0)
+	choices := make(map[uint32]int)
 	for option := range custOptionTable.GetFixedRecordsByForeignKey(modelRecord.GetID()) {
 		optionName := option.GetStringFieldByName("Name_lang")
 
 		choiceRecords := make([]DBDRecord, 0)
-		for choice := range custChoicesTable.GetFixedRecordsByForeignKey(option.GetID()) {
+		for choice := range custChoicesCache.GetFixedRecordsByForeignKey(option.GetID()) {
 			choiceRecords = append(choiceRecords, choice)
 		}
 		sort.Slice(choiceRecords, func(i, j int) bool {
@@ -263,21 +265,25 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 		})
 
 		for _, choice := range choiceRecords {
-			var color uint32 = 0
-			switch v := choice.GetFieldByName("SwatchColor").(type) {
-			case []int64:
-				color = uint32(v[0])
-			default:
-				panic("SwatchColor has unexpected type")
-			}
-
-			choices[choice.GetID()] = model.ConfigurationChoice{
-				Name:       choice.GetStringFieldByName("Name_lang"),
-				Color:      color,
-				OrderIndex: uint(choice.GetIntFieldByName("OrderIndex")),
-				OptionName: optionName,
-			}
+			choices[choice.GetID()] = len(mdl.Choices)
+			mdl.Choices = append(mdl.Choices, model.ConfigChoice{
+				Option: optionName,
+				Choice: choice.GetStringFieldByName("Name_lang"),
+				Color:  uint32(GetSliceFieldByName[int64](choice, "SwatchColor")[0]),
+			})
 		}
+	}
+
+	// cache all the model materials
+	var modelMaterials []DBDRecord
+	mdl.SegmentedTextures = make([]model.Texture, 0)
+	for modelMaterial := range chrModelMaterialTable.GetFixedRecordsByForeignKey(layoutId) {
+		modelMaterials = append(modelMaterials, modelMaterial)
+		mdl.SegmentedTextures = append(mdl.SegmentedTextures, model.Texture{
+			Width:    uint(modelMaterial.GetIntFieldByName("Width")),
+			Height:   uint(modelMaterial.GetIntFieldByName("Height")),
+			Segments: make([]model.TextureSegment, 0),
+		})
 	}
 
 	// cache all the texture sections for the layout
@@ -286,92 +292,90 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 		textureSections = append(textureSections, textureSection)
 	}
 
-	// cache all the texture layers for the layout
+	// cache all the texture layers and sort them by the layer field
 	var textureLayers []DBDRecord
 	for textureLayer := range textureLayerTable.GetFixedRecordsByForeignKey(layoutId) {
 		textureLayers = append(textureLayers, textureLayer)
 	}
+	sort.Slice(textureLayers, func(i, j int) bool {
+		return textureLayers[i].GetIntFieldByName("Layer") < textureLayers[j].GetIntFieldByName("Layer")
+	})
 
-	// cache all the model materials
-	var modelMaterials []DBDRecord
-	mdl.Materials = make([]model.Material, 0)
-	for modelMaterial := range chrModelMaterialTable.GetFixedRecordsByForeignKey(layoutId) {
-		modelMaterials = append(modelMaterials, modelMaterial)
-		mdl.Materials = append(mdl.Materials, model.Material{
-			Width:  uint(modelMaterial.GetIntFieldByName("Width")),
-			Height: uint(modelMaterial.GetIntFieldByName("Height")),
-		})
+	// setup all the material segments
+	layerMapping := make(map[int64][]int)
+	for _, textureLayer := range textureLayers {
+		textureType := textureLayer.GetIntFieldByName("TextureType")
+		materialIdx := slices.IndexFunc(modelMaterials, func(mat DBDRecord) bool { return mat.GetIntFieldByName("TextureType") == textureType })
+		material := &mdl.SegmentedTextures[materialIdx]
+
+		textureTargetId := GetSliceFieldByName[int64](textureLayer, "ChrModelTextureTargetID")[0]
+		layerMapping[textureTargetId] = []int{materialIdx, len(material.Segments)}
+
+		sectionTypeBitmask := textureLayer.GetIntFieldByName("TextureSectionTypeBitMask")
+		if sectionTypeBitmask == -1 {
+			material.Segments = append(material.Segments, model.TextureSegment{
+				X:         0,
+				Y:         0,
+				Width:     material.Width,
+				Height:    material.Height,
+				BlendMode: "overlay", // set them all to overlay for now
+			})
+		} else {
+			for _, section := range textureSections {
+				sectionType := section.GetIntFieldByName("SectionType")
+				if (1<<sectionType)&sectionTypeBitmask != 0 {
+					material.Segments = append(material.Segments, model.TextureSegment{
+						X:         uint(section.GetIntFieldByName("X")),
+						Y:         uint(section.GetIntFieldByName("Y")),
+						Width:     uint(section.GetIntFieldByName("Width")),
+						Height:    uint(section.GetIntFieldByName("Height")),
+						BlendMode: "overlay", // set them all to overlay for now
+					})
+				}
+			}
+		}
 	}
 
 	imageMap := make(map[uint32]int)
 
 	for custElement := range custElementTable.GetRecords {
 		choiceId := uint32(custElement.GetIntFieldByName("ChrCustomizationChoiceID"))
-		if choice, ok := choices[choiceId]; ok {
-			component := model.ConfigurationComponent{
-				Configurations:   []model.ConfigurationChoice{choice},
-				Geosets:          make([]int, 0),
-				TextureFragments: make([]model.TextureFragment, 0),
+		if choiceIdx, ok := choices[choiceId]; ok {
+			component := model.ConfigElement{
+				ChoiceIdxes: []int{choiceIdx},
+				Materials:   make([]model.ElementMaterial, 0),
 			}
 
 			relatedChoiceId := uint32(custElement.GetIntFieldByName("RelatedChrCustomizationChoiceID"))
-			if choice, ok := choices[relatedChoiceId]; ok {
-				component.Configurations = append(component.Configurations, choice)
+			if choiceIdx, ok := choices[relatedChoiceId]; ok {
+				component.ChoiceIdxes = append(component.ChoiceIdxes, choiceIdx)
 			}
 
 			geosetId := int(custElement.GetIntFieldByName("ChrCustomizationGeosetID"))
 			if geosetId > 0 {
-				component.Geosets = append(component.Geosets, geosetId)
+				component.MeshIdxes = []int{geosetId}
+				// @todo figure out how to map the geosetId to a mesh
 			}
 
 			materialId := uint32(custElement.GetIntFieldByName("ChrCustomizationMaterialID"))
 			material := custMaterialCache.GetFixedRecordById(materialId)
 			if material != nil {
-				var materialFragment model.TextureFragment
 				textureTargetId := material.GetIntFieldByName("ChrModelTextureTargetID")
-				for _, textureLayer := range textureLayers {
-					textureTargetIds := textureLayer.GetFieldByName("ChrModelTextureTargetID")
-					var matched bool = false
-					switch ids := textureTargetIds.(type) {
-					case []int64:
-						matched = ids[0] == textureTargetId
-					}
-					if matched {
-						// I wonder if thie should be textureTargetId or the Layer field
-						materialFragment.Layer = uint(textureTargetId)
-						//materialFragment.Layer = uint(textureLayer.GetIntFieldByName("Layer"))
-						materialFragment.BlendMode = convertBlendMode(textureLayer.GetIntFieldByName("BlendMode"))
-
-						mask := textureLayer.GetIntFieldByName("TextureSectionTypeBitMask")
-						textureType := textureLayer.GetIntFieldByName("TextureType")
-						modelMatIdx := slices.IndexFunc(modelMaterials, func(r DBDRecord) bool { return r.GetIntFieldByName("TextureType") == textureType })
-						materialFragment.MaterialIdx = modelMatIdx
-						if mask == -1 {
-							materialFragment.X = 0
-							materialFragment.Y = 0
-							materialFragment.Width = uint(modelMaterials[modelMatIdx].GetIntFieldByName("Width"))
-							materialFragment.Height = uint(modelMaterials[modelMatIdx].GetIntFieldByName("Height"))
-						} else {
-							for _, textureSection := range textureSections {
-								sectionType := textureSection.GetIntFieldByName("SectionType")
-								if ((1 << sectionType) & mask) != 0 {
-									materialFragment.X = uint(textureSection.GetIntFieldByName("X"))
-									materialFragment.Y = uint(textureSection.GetIntFieldByName("Y"))
-									materialFragment.Width = uint(textureSection.GetIntFieldByName("Width"))
-									materialFragment.Height = uint(textureSection.GetIntFieldByName("Height"))
-									break
-								}
-							}
-						}
-						break
-					}
+				matInfo, ok := layerMapping[textureTargetId]
+				if !ok {
+					panic("configuration references a textureTargetId we don't know about")
+				}
+				textureSegment := model.ElementMaterial{
+					MaterialIdx: matInfo[0],
+					SegmentIdx:  matInfo[1],
 				}
 
 				resourcesId := material.GetIntFieldByName("MaterialResourcesID")
 				for textureFileData := range textureFileDataCache.GetFixedRecordsByForeignKey(uint32(resourcesId)) {
 					textureFileId := textureFileData.GetID()
 					if idx, ok := imageMap[textureFileId]; ok {
-						materialFragment.Img = idx
+						textureSegment.ImageIdx = idx
+						break
 					} else {
 						// what do I do with multiple texture file datas?
 						if textureFile, err := wow.Casc.OpenFileById(textureFileData.GetID(), false); err == nil {
@@ -380,16 +384,16 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 									imgIdx := len(mdl.Images)
 									mdl.Images = append(mdl.Images, img)
 									imageMap[textureFileId] = imgIdx
-									materialFragment.Img = imgIdx
+									textureSegment.ImageIdx = imgIdx
 									break
 								}
 							}
 						}
 					}
 				}
-				component.TextureFragments = append(component.TextureFragments, materialFragment)
+				component.Materials = append(component.Materials, textureSegment)
 			}
-			mdl.Configurations = append(mdl.Configurations, component)
+			mdl.Elements = append(mdl.Elements, component)
 		}
 	}
 }

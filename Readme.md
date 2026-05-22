@@ -15,6 +15,66 @@ cd viewer
 npm run start
 ```
 
+## GLTF Extension
+
+Extension needs to support the configuration options.
+- Turning on and off geosets
+- Turning on and off sections of textures
+- Some configuration options combine to decide if texture sections should be turned on or off
+- Texture sections have different blending 
+
+### MDLE_SegmentedTexture
+
+A material that is built from multiple texture segments that can be overlayed on top of each other.  The segmented texture has a width and height, which defines how big the texture is is pixels.  Segments define how the texture gets composed, each segment defines a section of the texture where the segment is applied, the _x_ and _y_ fields define the top left corner where the segment is applied on the texture in pixels, and _width_ and _height_ defines the size of the segment in pixels.  Some segments overlap each other so there is a _layer_ field, which defines the order that the segments are aplied with lower numbers being applied first, and a _blend_mode_ field that defines how the segment gets blended with the already applied segments.  The configuration extension defines configurations that maps images into segments based on configuration options to build a texture.
+
+```json
+{
+  "width": 2048,
+  "height": 1024,
+  "segments": [
+    {
+      "layer": 0,
+      "x": 0,
+      "y": 0,
+      "width": 1024,
+      "height": 1024,
+      "blend_mode": "overlay",
+    }
+  ]
+}
+```
+
+### MDLE_Configuration
+
+This extension gets added to the document to define all the configuration choices for the scene and how they map to geosets and materials.  Choices have an option name which is shared between related choices.  Choices within an option are uniquely identified by the choice name and/or the color fields.  You can think of choices as an html _select_ element except option name is the label and choices are the individual options.
+
+Elements define how choices map to geosets and materials.  Each element has a list of choice indices within the choices list, all of which should be selected by the UI for the element to be applied.  Applying the element requires enabling all the materials defined in the materials list and the mesh ids defined in the meshes list.  A material has an index into the document materials array which points to a segmented texture material, the segment field defines an index into the material's segments array, and the image field defines an index into the document's image list to be applied to the material using the segment definition.
+
+```json
+{
+  "choices": [
+    {
+      "option": "<option_name>",
+      "choice": "<choice_name>",
+      "color": 0x01234567
+    }
+  ],
+  "elements": [
+    {
+      "choices": [0],
+      "materials": [
+        {
+          "material": 0,
+          "segment": 2,
+          "image": 50
+        }
+      ],
+      "meshes": [0]
+    }
+  ]
+}
+```
+
 ## Resources
 
 - [WoW list files](https://github.com/wowdev/wow-listfile/)

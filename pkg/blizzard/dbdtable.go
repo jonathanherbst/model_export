@@ -317,6 +317,16 @@ func (r DBDRecord) GetField(index int) interface{} {
 	panic("unhandled field type")
 }
 
+func GetSliceFieldByName[T any](record DBDRecord, name string) []T {
+	field := record.GetFieldByName(name)
+	switch f := field.(type) {
+	case []T:
+		return f
+	default:
+		panic("unexpected field type")
+	}
+}
+
 // bytesToUnsignedInts converts a byte slice into a slice of uint64, parsing as little endian.
 // T must be an unsigned integer type (8 to 64 bits) that determines the parsing size.
 // Panics if the byte array size does not match the expected count.

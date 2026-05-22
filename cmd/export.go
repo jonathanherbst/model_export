@@ -11,7 +11,6 @@ import (
 	"jph/model-export/pkg/model"
 	"os"
 	"path/filepath"
-	"sort"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/image/draw"
@@ -115,36 +114,32 @@ func wowLoadModel(wow *blizzard.WOWCasc, modelName string, gender *int) model.Mo
 }
 
 func wowExportTex(mdl model.Model, path string) {
-	selectedOptions := make(map[string]model.ConfigurationChoice)
-	for _, component := range mdl.Configurations {
-		for _, choice := range component.Configurations {
-			if currentChoice, ok := selectedOptions[choice.OptionName]; ok {
-				if choice.OrderIndex < currentChoice.OrderIndex {
-					selectedOptions[choice.OptionName] = choice
-				}
-			} else {
-				selectedOptions[choice.OptionName] = choice
-			}
+	selectedOptions := make(map[string]int)
+	for i, choice := range mdl.Choices {
+		if _, ok := selectedOptions[choice.Option]; !ok {
+			selectedOptions[choice.Option] = i
 		}
 	}
 
 	os.Mkdir(path, 0750)
-	for i, component := range mdl.Configurations {
+	for _, element := range mdl.Elements {
 		selected := true
 		optionString := ""
-		for _, choice := range component.Configurations {
-			selected = selected && selectedOptions[choice.OptionName].OrderIndex == choice.OrderIndex
-			optionString += fmt.Sprintf("%s(%s-%08X-%d)", choice.OptionName, choice.Name, choice.Color, choice.OrderIndex)
+		for _, choiceIdx := range element.ChoiceIdxes {
+			choice := mdl.Choices[choiceIdx]
+			selected = selected && (selectedOptions[choice.Option] == choiceIdx)
+			optionString += fmt.Sprintf("%s(%s-%08X)", choice.Option, choice.Choice, choice.Color)
 		}
-		if selected && len(component.TextureFragments) > 0 {
-			for _, frag := range component.TextureFragments {
-				texName := filepath.Join(path, fmt.Sprintf("%d-%s.png", i, optionString))
+
+		if selected && len(element.Materials) > 0 {
+			for _, mat := range element.Materials {
+				texName := filepath.Join(path, fmt.Sprintf("%s.png", optionString))
 				file, err := os.Create(texName)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "failed to open texture file: %v\n", err)
 					os.Exit(2)
 				}
-				png.Encode(file, mdl.Images[frag.Img])
+				png.Encode(file, mdl.Images[mat.ImageIdx])
 				file.Close()
 			}
 		}
@@ -152,48 +147,42 @@ func wowExportTex(mdl model.Model, path string) {
 }
 
 func wowExportMat(mdl model.Model, path string) {
-	selectedOptions := make(map[string]model.ConfigurationChoice)
-	for _, component := range mdl.Configurations {
-		for _, choice := range component.Configurations {
-			if currentChoice, ok := selectedOptions[choice.OptionName]; ok {
-				if choice.OrderIndex < currentChoice.OrderIndex {
-					selectedOptions[choice.OptionName] = choice
-				}
-			} else {
-				selectedOptions[choice.OptionName] = choice
-			}
+	selectedOptions := make(map[string]int)
+	for i, choice := range mdl.Choices {
+		if _, ok := selectedOptions[choice.Option]; !ok {
+			selectedOptions[choice.Option] = i
 		}
 	}
 
 	os.Mkdir(path, 0750)
-	selectedComponents := make([]model.ConfigurationComponent, 0)
-	for _, component := range mdl.Configurations {
+	selectedElements := make([]model.ConfigElement, 0)
+	for _, element := range mdl.Elements {
 		selected := true
-		for _, choice := range component.Configurations {
-			selected = selected && selectedOptions[choice.OptionName].OrderIndex == choice.OrderIndex
+		for _, choiceIdx := range element.ChoiceIdxes {
+			selected = selected && (selectedOptions[mdl.Choices[choiceIdx].Option] == choiceIdx)
 		}
-		if selected && len(component.TextureFragments) > 0 {
-			selectedComponents = append(selectedComponents, component)
+		if selected {
+			selectedElements = append(selectedElements, element)
 		}
 	}
 
-	textureFrags := make([]model.TextureFragment, 0)
-	for _, component := range selectedComponents {
-		for _, frag := range component.TextureFragments {
-			textureFrags = append(textureFrags, frag)
+	mats := make([]model.ElementMaterial, 0)
+	for _, element := range selectedElements {
+		for _, mat := range element.Materials {
+			mats = append(mats, mat)
 		}
 	}
-	sort.Slice(textureFrags, func(i, j int) bool { return textureFrags[i].Layer < textureFrags[j].Layer })
 
-	for matIdx, mat := range mdl.Materials {
-		texture := image.NewRGBA(image.Rect(0, 0, int(mat.Width), int(mat.Height)))
-		for _, frag := range textureFrags {
-			if frag.MaterialIdx == matIdx {
-				texImg := mdl.Images[frag.Img]
+	for matIdx, tex := range mdl.SegmentedTextures {
+		texture := image.NewRGBA(image.Rect(0, 0, int(tex.Width), int(tex.Height)))
+		for _, mat := range mats {
+			if mat.MaterialIdx == matIdx {
+				seg := tex.Segments[mat.SegmentIdx]
+				texImg := mdl.Images[mat.ImageIdx]
 				// need to resize the image to the fragment size
-				img := image.NewRGBA(image.Rect(0, 0, int(frag.Width), int(frag.Height)))
+				img := image.NewRGBA(image.Rect(0, 0, int(seg.Width), int(seg.Height)))
 				draw.BiLinear.Scale(img, img.Rect, texImg, texImg.Bounds(), draw.Over, nil)
-				rect := img.Bounds().Add(image.Point{int(frag.X), int(frag.Y)})
+				rect := img.Bounds().Add(image.Point{int(seg.X), int(seg.Y)})
 				draw.Draw(texture, rect, img, image.Point{0, 0}, draw.Over)
 			}
 		}
