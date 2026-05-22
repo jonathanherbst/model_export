@@ -244,6 +244,11 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 	if err != nil {
 		panic("no CharComponentTextureLayouts table")
 	}
+	chrCustGeosetTable, err := wow.GetTable("ChrCustomizationGeoset")
+	if err != nil {
+		panic("no ChrCustomizationGeoset table")
+	}
+	chrCustGeosetCache := chrCustGeosetTable.Cache()
 
 	layoutId := uint32(modelRecord.GetIntFieldByName("CharComponentTextureLayoutID"))
 	layout := textureLayoutsTable.GetFixedRecordById(layoutId)
@@ -353,8 +358,17 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 
 			geosetId := int(custElement.GetIntFieldByName("ChrCustomizationGeosetID"))
 			if geosetId > 0 {
-				component.MeshIdxes = []int{geosetId}
-				// @todo figure out how to map the geosetId to a mesh
+				if geoset := chrCustGeosetCache.GetFixedRecordById(uint32(geosetId)); geoset != nil {
+					geosetType := geoset.GetIntFieldByName("GeosetType")
+					geosetSubId := geoset.GetIntFieldByName("GeosetID")
+					meshName := GetMeshName(uint16(geosetType*100 + geosetSubId))
+					meshIdx := slices.IndexFunc(mdl.Skin.Meshes, func(mesh model.Mesh) bool { return mesh.Name == meshName })
+					if meshIdx != -1 {
+						component.MeshIdxes = []int{meshIdx}
+					}
+				} else {
+					panic("geoset not found")
+				}
 			}
 
 			materialId := uint32(custElement.GetIntFieldByName("ChrCustomizationMaterialID"))

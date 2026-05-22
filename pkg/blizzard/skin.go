@@ -55,13 +55,17 @@ func (skin M2Skin) FillModel(mdl *model.Model) {
 		Meshes: make([]model.Mesh, len(skin.Meshes)),
 	}
 	for i, mesh := range skin.Meshes {
-		mdl.Skin.Meshes[i].Name = fmt.Sprintf("%d", mesh.Id)
+		mdl.Skin.Meshes[i].Name = GetMeshName(mesh.Id)
 		mdl.Skin.Meshes[i].RenderProcess = model.RenderTriangles
 		mdl.Skin.Meshes[i].VertexMap = make([]int, len(mesh.LocalVertexIdxes))
 		for mapIdx, vertexIdx := range mesh.LocalVertexIdxes {
 			mdl.Skin.Meshes[i].VertexMap[mapIdx] = int(skin.VertexIdxes[vertexIdx])
 		}
 	}
+}
+
+func GetMeshName(id uint16) string {
+	return fmt.Sprintf("Geoset_%s", GetGeosetName(id))
 }
 
 type M2Mesh struct {
