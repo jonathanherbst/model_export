@@ -34,6 +34,7 @@ type Skin struct {
 
 type Mesh struct {
 	Name          string
+	IsEquipment   bool
 	VertexMap     []int
 	RenderProcess RenderProcess
 }

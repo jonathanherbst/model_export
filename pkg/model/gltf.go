@@ -126,24 +126,27 @@ func ExportGLTF(mdl Model, path string) error {
 
 	if mdl.Skin != nil {
 		// we have a skin so set it up
-		doc.Meshes = make([]*gltf.Mesh, len(mdl.Skin.Meshes))
-		for i, submesh := range mdl.Skin.Meshes {
-			indices := make([]uint16, len(submesh.VertexMap))
-			for mapIdx, idx := range submesh.VertexMap {
-				indices[mapIdx] = uint16(idx)
+		doc.Meshes = make([]*gltf.Mesh, 0)
+		for _, submesh := range mdl.Skin.Meshes {
+			if !submesh.IsEquipment {
+				indices := make([]uint16, len(submesh.VertexMap))
+				for mapIdx, idx := range submesh.VertexMap {
+					indices[mapIdx] = uint16(idx)
+				}
+				idxAcc := modeler.WriteIndices(doc, indices)
+				meshIdx := len(doc.Meshes)
+				doc.Meshes = append(doc.Meshes, &gltf.Mesh{
+					Name: fmt.Sprintf("Mesh%s", submesh.Name),
+					Primitives: []*gltf.Primitive{{
+						Indices:    gltf.Index(idxAcc),
+						Mode:       gltf.PrimitiveTriangles, // todo: get this from the mesh
+						Attributes: meshAttrs,
+					}},
+				})
+				nodeIdx := len(doc.Nodes)
+				doc.Nodes = append(doc.Nodes, &gltf.Node{Name: fmt.Sprintf("Mesh%s", submesh.Name), Mesh: &meshIdx, Skin: skinIdx})
+				modelNode.Children = append(modelNode.Children, nodeIdx)
 			}
-			idxAcc := modeler.WriteIndices(doc, indices)
-			doc.Meshes[i] = &gltf.Mesh{
-				Name: fmt.Sprintf("Mesh%s", submesh.Name),
-				Primitives: []*gltf.Primitive{{
-					Indices:    gltf.Index(idxAcc),
-					Mode:       gltf.PrimitiveTriangles, // todo: get this from the mesh
-					Attributes: meshAttrs,
-				}},
-			}
-			nodeIdx := len(doc.Nodes)
-			doc.Nodes = append(doc.Nodes, &gltf.Node{Name: fmt.Sprintf("Mesh%s", submesh.Name), Mesh: new(i), Skin: skinIdx})
-			modelNode.Children = append(modelNode.Children, nodeIdx)
 		}
 	} else {
 		// no skin, render the vertices as points

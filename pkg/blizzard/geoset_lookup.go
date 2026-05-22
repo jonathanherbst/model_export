@@ -65,3 +65,10 @@ func GetGeosetName(id uint16) string {
 		return fmt.Sprintf("%d_%d", groupId, subId)
 	}
 }
+
+func IsGeosetEquipment(id uint16) bool {
+	groupId := id / 100
+	subId := id - (groupId * 100)
+
+	return ((groupId >= 4 && groupId <= 6) || (groupId >= 8 && groupId <= 13) || groupId == 15 || groupId == 18 || groupId == 20 || groupId == 22) && subId != 1
+}
