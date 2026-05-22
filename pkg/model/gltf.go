@@ -1,7 +1,9 @@
 package model
 
 import (
+	"bytes"
 	"fmt"
+	"image/png"
 	"sort"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -179,6 +181,16 @@ func ExportGLTF(mdl Model, path string) error {
 		addAnimationTracks(doc, doc.Animations[i], anim.TranslationTracks, *boneBaseNodeIdx, gltf.TRSTranslation)
 		addAnimationTracks(doc, doc.Animations[i], anim.RotationTracks, *boneBaseNodeIdx, gltf.TRSRotation)
 		addAnimationTracks(doc, doc.Animations[i], anim.ScaleTracks, *boneBaseNodeIdx, gltf.TRSScale)
+	}
+
+	doc.Images = make([]*gltf.Image, 0)
+	imgBuf := bytes.NewBuffer(make([]byte, 0))
+	for i, img := range mdl.Images {
+		imgBuf.Reset()
+		png.Encode(imgBuf, img)
+		if _, err := modeler.WriteImage(doc, fmt.Sprintf("Texture%d", i), "image/png", imgBuf); err != nil {
+			panic("failed to write image to the gltf doc")
+		}
 	}
 
 	return gltf.SaveBinary(doc, path)
