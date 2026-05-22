@@ -474,17 +474,3 @@ func computeFileSHA256(filePath string) (string, error) {
 	}
 	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
 }
-
-func convertBlendMode(blendMode int64) model.BlendMode {
-	// It might be a better idea to actually encode all the blend modes here, maybe in terms of glBlend parameters?
-	switch blendMode {
-	case 0:
-		return model.BlendModeNone
-	case 1, 4, 6, 7, 15, 16: // Blit, Multiply, Overlay, Screen, InferAlphaBlend, Unknown
-		return model.BlendModeInferAlphaBlend
-	case 9:
-		return model.BlendModeAlphaStraight
-	default:
-		panic(fmt.Sprintf("unsupported blend mode: %d", blendMode))
-	}
-}
