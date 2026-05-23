@@ -202,10 +202,36 @@ func ExportGLTF(mdl Model, path string) error {
 		}
 	}
 
+	defaultTextures := mdl.MakeDefaultTextures()
+
+	doc.Samplers = []*gltf.Sampler{{
+		MagFilter: gltf.MagLinear,
+		MinFilter: gltf.MinLinearMipMapLinear,
+		WrapS:     gltf.WrapClampToEdge,
+		WrapT:     gltf.WrapClampToEdge,
+	}}
+	doc.Textures = make([]*gltf.Texture, len(mdl.SegmentedTextures))
 	doc.Materials = make([]*gltf.Material, len(mdl.SegmentedTextures))
 	for i, tex := range mdl.SegmentedTextures {
+		imgBuf.Reset()
+		png.Encode(imgBuf, defaultTextures[i])
+		imgIdx := len(doc.Images)
+		if _, err := modeler.WriteImage(doc, fmt.Sprintf("DefaultTexture%d", i), "image/png", imgBuf); err != nil {
+			panic("failed to write image to the gltf doc")
+		}
+
+		doc.Textures[i] = &gltf.Texture{
+			Source:  new(imgIdx),
+			Sampler: new(0),
+		}
+
 		doc.Materials[i] = &gltf.Material{
 			Name: tex.Name,
+			PBRMetallicRoughness: &gltf.PBRMetallicRoughness{
+				BaseColorTexture: &gltf.TextureInfo{Index: i},
+				MetallicFactor:   new(0.0),
+				RoughnessFactor:  new(1.0),
+			},
 			Extensions: gltf.Extensions{
 				SEGMENTED_TEXTURE_NAME: tex,
 			},

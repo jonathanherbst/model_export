@@ -4,6 +4,7 @@ import (
 	"image"
 
 	"github.com/go-gl/mathgl/mgl32"
+	"golang.org/x/image/draw"
 )
 
 type Model struct {
@@ -20,6 +21,58 @@ type Model struct {
 	Elements          []ConfigElement
 	SegmentedTextures []SegmentedTexture
 	Images            []image.Image
+}
+
+func (mdl Model) GetDefaultElements() []ConfigElement {
+	selectedOptions := make(map[string]int)
+	for i, choice := range mdl.Choices {
+		if _, ok := selectedOptions[choice.Option]; !ok {
+			selectedOptions[choice.Option] = i
+		}
+	}
+
+	selectedElements := make([]ConfigElement, 0)
+	for _, element := range mdl.Elements {
+		selected := true
+		for _, choiceIdx := range element.ChoiceIdxes {
+			selected = selected && (selectedOptions[mdl.Choices[choiceIdx].Option] == choiceIdx)
+		}
+		if selected {
+			selectedElements = append(selectedElements, element)
+		}
+	}
+
+	return selectedElements
+}
+
+func (mdl Model) MakeDefaultTextures() []image.Image {
+	elements := mdl.GetDefaultElements()
+
+	mats := make([]ConfigMaterial, 0)
+	for _, element := range elements {
+		for _, mat := range element.Materials {
+			mats = append(mats, mat)
+		}
+	}
+
+	textures := make([]image.Image, len(mdl.SegmentedTextures))
+	for matIdx, tex := range mdl.SegmentedTextures {
+		texture := image.NewRGBA(image.Rect(0, 0, int(tex.Width), int(tex.Height)))
+		for _, mat := range mats {
+			if mat.MaterialIdx == matIdx {
+				seg := tex.Segments[mat.SegmentIdx]
+				texImg := mdl.Images[mat.ImageIdx]
+				// need to resize the image to the fragment size
+				img := image.NewRGBA(image.Rect(0, 0, int(seg.Width), int(seg.Height)))
+				draw.BiLinear.Scale(img, img.Rect, texImg, texImg.Bounds(), draw.Over, nil)
+				rect := img.Bounds().Add(image.Point{int(seg.X), int(seg.Y)})
+				draw.Draw(texture, rect, img, image.Point{0, 0}, draw.Over)
+			}
+		}
+		textures[matIdx] = texture
+	}
+
+	return textures
 }
 
 type RenderProcess int
