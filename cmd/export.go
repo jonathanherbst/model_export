@@ -166,7 +166,7 @@ func wowExportMat(mdl model.Model, path string) {
 		}
 	}
 
-	mats := make([]model.ElementMaterial, 0)
+	mats := make([]model.ConfigMaterial, 0)
 	for _, element := range selectedElements {
 		for _, mat := range element.Materials {
 			mats = append(mats, mat)

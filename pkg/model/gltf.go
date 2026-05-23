@@ -193,6 +193,22 @@ func ExportGLTF(mdl Model, path string) error {
 		}
 	}
 
+	doc.Materials = make([]*gltf.Material, len(mdl.SegmentedTextures))
+	for i, tex := range mdl.SegmentedTextures {
+		doc.Materials[i] = &gltf.Material{
+			Extensions: gltf.Extensions{
+				SEGMENTED_TEXTURE_NAME: tex,
+			},
+		}
+	}
+
+	doc.Extensions = gltf.Extensions{
+		CONFIGURATION_NAME: ConfigExtension{
+			Choices:  mdl.Choices,
+			Elements: mdl.Elements,
+		},
+	}
+
 	return gltf.SaveBinary(doc, path)
 }
 

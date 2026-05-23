@@ -18,7 +18,7 @@ type Model struct {
 	Animations        []Animation
 	Choices           []ConfigChoice
 	Elements          []ConfigElement
-	SegmentedTextures []Texture
+	SegmentedTextures []SegmentedTexture
 	Images            []image.Image
 }
 
@@ -69,35 +69,3 @@ const (
 	InterpolationCubicBezier
 	InterpolationCubicHermite
 )
-
-type TextureSegment struct {
-	X         uint   `json:"x"`
-	Y         uint   `json:"y"`
-	Width     uint   `json:"width"`
-	Height    uint   `json:"height"`
-	BlendMode string `json:"blend_mode"`
-}
-
-type Texture struct {
-	Width    uint             `json:"width"`
-	Height   uint             `json:"height"`
-	Segments []TextureSegment `json:"segments"`
-}
-
-type ConfigChoice struct {
-	Option string `json:"option"`
-	Choice string `json:"choice"`
-	Color  uint32 `json:"color"`
-}
-
-type ElementMaterial struct {
-	MaterialIdx int `json:"material"`
-	SegmentIdx  int `json:"segment"`
-	ImageIdx    int `json:"image"`
-}
-
-type ConfigElement struct {
-	ChoiceIdxes []int             `json:"choices"`
-	Materials   []ElementMaterial `json:"materials"`
-	MeshIdxes   []int             `json:"meshes"`
-}

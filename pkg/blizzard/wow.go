@@ -281,10 +281,10 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 
 	// cache all the model materials
 	var modelMaterials []DBDRecord
-	mdl.SegmentedTextures = make([]model.Texture, 0)
+	mdl.SegmentedTextures = make([]model.SegmentedTexture, 0)
 	for modelMaterial := range chrModelMaterialTable.GetFixedRecordsByForeignKey(layoutId) {
 		modelMaterials = append(modelMaterials, modelMaterial)
-		mdl.SegmentedTextures = append(mdl.SegmentedTextures, model.Texture{
+		mdl.SegmentedTextures = append(mdl.SegmentedTextures, model.SegmentedTexture{
 			Width:    uint(modelMaterial.GetIntFieldByName("Width")),
 			Height:   uint(modelMaterial.GetIntFieldByName("Height")),
 			Segments: make([]model.TextureSegment, 0),
@@ -348,7 +348,7 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 		if choiceIdx, ok := choices[choiceId]; ok {
 			component := model.ConfigElement{
 				ChoiceIdxes: []int{choiceIdx},
-				Materials:   make([]model.ElementMaterial, 0),
+				Materials:   make([]model.ConfigMaterial, 0),
 			}
 
 			relatedChoiceId := uint32(custElement.GetIntFieldByName("RelatedChrCustomizationChoiceID"))
@@ -379,7 +379,7 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 				if !ok {
 					panic("configuration references a textureTargetId we don't know about")
 				}
-				textureSegment := model.ElementMaterial{
+				textureSegment := model.ConfigMaterial{
 					MaterialIdx: matInfo[0],
 					SegmentIdx:  matInfo[1],
 				}
