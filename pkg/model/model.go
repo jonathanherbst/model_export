@@ -36,6 +36,7 @@ type Mesh struct {
 	Name          string
 	IsEquipment   bool
 	VertexMap     []int
+	MaterialName  string
 	RenderProcess RenderProcess
 }
 

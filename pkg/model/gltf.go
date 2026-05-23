@@ -136,6 +136,14 @@ func ExportGLTF(mdl Model, path string) error {
 					indices[mapIdx] = uint16(idx)
 				}
 				idxAcc := modeler.WriteIndices(doc, indices)
+
+				var matIdx *int = nil
+				for i, tex := range mdl.SegmentedTextures {
+					if tex.Name == submesh.MaterialName {
+						matIdx = &i
+					}
+				}
+
 				meshIdx := len(doc.Meshes)
 				doc.Meshes = append(doc.Meshes, &gltf.Mesh{
 					Name: fmt.Sprintf("Mesh%s", submesh.Name),
@@ -143,6 +151,7 @@ func ExportGLTF(mdl Model, path string) error {
 						Indices:    gltf.Index(idxAcc),
 						Mode:       gltf.PrimitiveTriangles, // todo: get this from the mesh
 						Attributes: meshAttrs,
+						Material:   matIdx,
 					}},
 				})
 				nodeIdx := len(doc.Nodes)
@@ -196,6 +205,7 @@ func ExportGLTF(mdl Model, path string) error {
 	doc.Materials = make([]*gltf.Material, len(mdl.SegmentedTextures))
 	for i, tex := range mdl.SegmentedTextures {
 		doc.Materials[i] = &gltf.Material{
+			Name: tex.Name,
 			Extensions: gltf.Extensions{
 				SEGMENTED_TEXTURE_NAME: tex,
 			},

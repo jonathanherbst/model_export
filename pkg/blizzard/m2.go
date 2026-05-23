@@ -39,6 +39,14 @@ func M2FromReader(r io.Reader) (*M2, error) {
 			}
 			m2.Sequences = md20.Sequences()
 			nSkins = int(md20.MD20Header.NumSkinProfiles)
+
+			// load textures with lookup table
+			textures := md20.MD20Header.Textures.Load(data, 0)
+			textureLookup := md20.MD20Header.TextureCombos.Load(data, 0)
+			m2.Textures = make([]M2Texture, len(textureLookup))
+			for i, ti := range textureLookup {
+				m2.Textures[i] = textures[ti]
+			}
 		case "SFID":
 			m2.SkinFileIds = make([]uint32, nSkins)
 			binary.Decode(data, binary.LittleEndian, m2.SkinFileIds)
@@ -61,6 +69,7 @@ type M2 struct {
 	SkinFileIds    []uint32
 	SkelFileIds    []uint32
 	TextureFileIds []uint32
+	Textures       []M2Texture
 }
 
 func (m2 M2) FillModel(mdl *model.Model) {

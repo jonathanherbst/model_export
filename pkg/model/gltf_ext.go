@@ -11,6 +11,7 @@ type TextureSegment struct {
 }
 
 type SegmentedTexture struct {
+	Name     string           `json:"name"`
 	Width    uint             `json:"width"`
 	Height   uint             `json:"height"`
 	Segments []TextureSegment `json:"segments"`

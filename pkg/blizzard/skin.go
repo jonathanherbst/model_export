@@ -40,6 +40,7 @@ func M2SkinFromBuf(buf []byte) (*M2Skin, error) {
 		index := (int(submesh.Level) << 16) | int(submesh.IndexStart)
 		skin.Meshes[i].LocalVertexIdxes = skin.TriangleIndxes[index : index+int(submesh.IndexCount)]
 	}
+	skin.Batches = header.Batches.Load(buf, 0)
 
 	return &skin, nil
 }
@@ -48,9 +49,10 @@ type M2Skin struct {
 	VertexIdxes    []uint16
 	TriangleIndxes []uint16
 	Meshes         []M2Mesh
+	Batches        []M2Batch
 }
 
-func (skin M2Skin) FillModel(mdl *model.Model) {
+func (skin M2Skin) FillModel(mdl *model.Model, m2 M2) {
 	mdl.Skin = &model.Skin{
 		Meshes: make([]model.Mesh, len(skin.Meshes)),
 	}
@@ -62,6 +64,11 @@ func (skin M2Skin) FillModel(mdl *model.Model) {
 		for mapIdx, vertexIdx := range mesh.LocalVertexIdxes {
 			mdl.Skin.Meshes[i].VertexMap[mapIdx] = int(skin.VertexIdxes[vertexIdx])
 		}
+	}
+
+	for _, batch := range skin.Batches {
+		textureType := m2.Textures[batch.TextureComboIndex].Type
+		mdl.Skin.Meshes[batch.SkinSectionIndex].MaterialName = textureTypeNames[textureType]
 	}
 }
 

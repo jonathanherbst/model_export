@@ -184,7 +184,7 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 		if err != nil {
 			return nil
 		}
-		skin.FillModel(&mdl)
+		skin.FillModel(&mdl, *m2File)
 	}
 
 	for _, skelFileId := range m2File.SkelFileIds {
@@ -284,7 +284,9 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 	mdl.SegmentedTextures = make([]model.SegmentedTexture, 0)
 	for modelMaterial := range chrModelMaterialTable.GetFixedRecordsByForeignKey(layoutId) {
 		modelMaterials = append(modelMaterials, modelMaterial)
+		textureType := modelMaterial.GetIntFieldByName("TextureType")
 		mdl.SegmentedTextures = append(mdl.SegmentedTextures, model.SegmentedTexture{
+			Name:     textureTypeNames[uint32(textureType)],
 			Width:    uint(modelMaterial.GetIntFieldByName("Width")),
 			Height:   uint(modelMaterial.GetIntFieldByName("Height")),
 			Segments: make([]model.TextureSegment, 0),

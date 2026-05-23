@@ -271,7 +271,9 @@ type M2Color struct {
 }
 
 type M2Texture struct {
-	// Placeholder
+	Type     uint32
+	Flags    uint32
+	Filename m2Array[byte]
 }
 
 type M2TextureWeight struct {

@@ -149,7 +149,7 @@ func exportGLTF(m2 *blizzard.M2, skin *blizzard.M2Skin, skel *blizzard.M2Skeleto
 	// fill up a model with the blizzard parameters
 	var mdl model.Model
 	m2.FillModel(&mdl)
-	skin.FillModel(&mdl)
+	skin.FillModel(&mdl, *m2)
 	skel.FillModel(&mdl)
 
 	// export the model
