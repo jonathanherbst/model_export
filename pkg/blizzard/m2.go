@@ -72,7 +72,7 @@ type M2 struct {
 	Textures       []M2Texture
 }
 
-func (m2 M2) FillModel(mdl *model.Model) {
+func (m2 M2) FillModel(mdl *model.Model, casc *Casc) {
 	if len(m2.Vertices) > 0 {
 		mdl.VertexPositions = make([]mgl32.Vec3, len(m2.Vertices))
 		mdl.VertexNormals = make([]mgl32.Vec3, len(m2.Vertices))
@@ -88,6 +88,34 @@ func (m2 M2) FillModel(mdl *model.Model) {
 			mdl.VertexBoneWeights[i] = v.BoneWeights // maybe need to normalize these?
 			mdl.VertexTexCoords_0[i] = v.TexCoords[0].IntoMGL32()
 			mdl.VertexTexCoords_1[i] = v.TexCoords[1].IntoMGL32()
+		}
+	}
+
+	if casc != nil {
+		for _, texFileId := range m2.TextureFileIds {
+			if texFileId > 0 {
+				f, err := casc.OpenFileById(texFileId, false)
+				if err != nil {
+					panic("failed to load texture file from m2")
+				}
+				blp, err := BLPFromReader(f)
+				if err != nil {
+					panic("failed to parse m2 blp")
+				}
+				defer blp.Close()
+
+				img, err := blp.Decode(0)
+				if err != nil {
+					panic("failed to parse m2 blp")
+				}
+
+				imgIdx := len(mdl.Images)
+				mdl.Images = append(mdl.Images, img)
+				mdl.Materials = append(mdl.Materials, model.Material{
+					Name:     GetTextureNameFromFileId(texFileId),
+					ImageIdx: &imgIdx,
+				})
+			}
 		}
 	}
 }

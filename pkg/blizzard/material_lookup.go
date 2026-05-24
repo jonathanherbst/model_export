@@ -1,5 +1,7 @@
 package blizzard
 
+import "fmt"
+
 var textureTypeNames = map[uint32]string{
 	0:  "None",
 	1:  "Skin",
@@ -28,4 +30,12 @@ var textureTypeNames = map[uint32]string{
 	24: "Texture24",
 	25: "Texture25",
 	26: "Texture26",
+}
+
+func GetTextureNameFromType(textureType uint32) string {
+	return textureTypeNames[textureType]
+}
+
+func GetTextureNameFromFileId(fileId uint32) string {
+	return fmt.Sprintf("TextureFile%d", fileId)
 }

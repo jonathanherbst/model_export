@@ -19,7 +19,7 @@ type Model struct {
 	Animations        []Animation
 	Choices           []ConfigChoice
 	Elements          []ConfigElement
-	SegmentedTextures []SegmentedTexture
+	Materials         []Material
 	Images            []image.Image
 }
 
@@ -55,21 +55,25 @@ func (mdl Model) MakeDefaultTextures() []image.Image {
 		}
 	}
 
-	textures := make([]image.Image, len(mdl.SegmentedTextures))
-	for matIdx, tex := range mdl.SegmentedTextures {
-		texture := image.NewRGBA(image.Rect(0, 0, int(tex.Width), int(tex.Height)))
-		for _, mat := range mats {
-			if mat.MaterialIdx == matIdx {
-				seg := tex.Segments[mat.SegmentIdx]
-				texImg := mdl.Images[mat.ImageIdx]
-				// need to resize the image to the fragment size
-				img := image.NewRGBA(image.Rect(0, 0, int(seg.Width), int(seg.Height)))
-				draw.BiLinear.Scale(img, img.Rect, texImg, texImg.Bounds(), draw.Over, nil)
-				rect := img.Bounds().Add(image.Point{int(seg.X), int(seg.Y)})
-				draw.Draw(texture, rect, img, image.Point{0, 0}, draw.Over)
+	textures := make([]image.Image, len(mdl.Materials))
+	for matIdx, tex := range mdl.Materials {
+		if tex.SegmentedTexture != nil {
+			texture := image.NewRGBA(image.Rect(0, 0, int(tex.SegmentedTexture.Width), int(tex.SegmentedTexture.Height)))
+			for _, mat := range mats {
+				if mat.MaterialIdx == matIdx {
+					seg := tex.SegmentedTexture.Segments[mat.SegmentIdx]
+					texImg := mdl.Images[mat.ImageIdx]
+					// need to resize the image to the fragment size
+					img := image.NewRGBA(image.Rect(0, 0, int(seg.Width), int(seg.Height)))
+					draw.BiLinear.Scale(img, img.Rect, texImg, texImg.Bounds(), draw.Over, nil)
+					rect := img.Bounds().Add(image.Point{int(seg.X), int(seg.Y)})
+					draw.Draw(texture, rect, img, image.Point{0, 0}, draw.Over)
+				}
 			}
+			textures[matIdx] = texture
+		} else {
+			textures[matIdx] = mdl.Images[*tex.ImageIdx]
 		}
-		textures[matIdx] = texture
 	}
 
 	return textures
@@ -123,3 +127,9 @@ const (
 	InterpolationCubicBezier
 	InterpolationCubicHermite
 )
+
+type Material struct {
+	Name             string
+	ImageIdx         *int
+	SegmentedTexture *SegmentedTexture
+}

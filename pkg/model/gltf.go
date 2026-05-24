@@ -138,7 +138,7 @@ func ExportGLTF(mdl Model, path string) error {
 				idxAcc := modeler.WriteIndices(doc, indices)
 
 				var matIdx *int = nil
-				for i, tex := range mdl.SegmentedTextures {
+				for i, tex := range mdl.Materials {
 					if tex.Name == submesh.MaterialName {
 						matIdx = &i
 					}
@@ -210,9 +210,9 @@ func ExportGLTF(mdl Model, path string) error {
 		WrapS:     gltf.WrapClampToEdge,
 		WrapT:     gltf.WrapClampToEdge,
 	}}
-	doc.Textures = make([]*gltf.Texture, len(mdl.SegmentedTextures))
-	doc.Materials = make([]*gltf.Material, len(mdl.SegmentedTextures))
-	for i, tex := range mdl.SegmentedTextures {
+	doc.Textures = make([]*gltf.Texture, len(mdl.Materials))
+	doc.Materials = make([]*gltf.Material, len(mdl.Materials))
+	for i, mat := range mdl.Materials {
 		imgBuf.Reset()
 		png.Encode(imgBuf, defaultTextures[i])
 		imgIdx := len(doc.Images)
@@ -226,15 +226,18 @@ func ExportGLTF(mdl Model, path string) error {
 		}
 
 		doc.Materials[i] = &gltf.Material{
-			Name: tex.Name,
+			Name: mat.Name,
 			PBRMetallicRoughness: &gltf.PBRMetallicRoughness{
 				BaseColorTexture: &gltf.TextureInfo{Index: i},
 				MetallicFactor:   new(0.0),
 				RoughnessFactor:  new(1.0),
 			},
-			Extensions: gltf.Extensions{
-				SEGMENTED_TEXTURE_NAME: tex,
-			},
+		}
+
+		if mat.SegmentedTexture != nil {
+			doc.Materials[i].Extensions = gltf.Extensions{
+				SEGMENTED_TEXTURE_NAME: *mat.SegmentedTexture,
+			}
 		}
 	}
 

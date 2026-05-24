@@ -148,7 +148,7 @@ func init() {
 func exportGLTF(m2 *blizzard.M2, skin *blizzard.M2Skin, skel *blizzard.M2Skeleton, gltf_path string) {
 	// fill up a model with the blizzard parameters
 	var mdl model.Model
-	m2.FillModel(&mdl)
+	m2.FillModel(&mdl, nil)
 	skin.FillModel(&mdl, *m2)
 	skel.FillModel(&mdl)
 

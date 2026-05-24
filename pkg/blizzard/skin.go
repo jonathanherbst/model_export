@@ -68,7 +68,12 @@ func (skin M2Skin) FillModel(mdl *model.Model, m2 M2) {
 
 	for _, batch := range skin.Batches {
 		textureType := m2.Textures[batch.TextureComboIndex].Type
-		mdl.Skin.Meshes[batch.SkinSectionIndex].MaterialName = textureTypeNames[textureType]
+		if textureType != 0 {
+			mdl.Skin.Meshes[batch.SkinSectionIndex].MaterialName = GetTextureNameFromType(textureType)
+		} else if int(batch.TextureComboIndex) < len(m2.TextureFileIds) {
+			texFileId := m2.TextureFileIds[batch.TextureComboIndex]
+			mdl.Skin.Meshes[batch.SkinSectionIndex].MaterialName = GetTextureNameFromFileId(texFileId)
+		}
 	}
 }
 

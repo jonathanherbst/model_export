@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"image"
 	"io"
 	"jph/model-export/pkg/model"
 	"net/http"
@@ -158,7 +159,12 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 		return nil
 	}
 
-	var mdl model.Model
+	mdl := model.Model{
+		Choices:   make([]model.ConfigChoice, 0),
+		Elements:  make([]model.ConfigElement, 0),
+		Materials: make([]model.Material, 0),
+		Images:    make([]image.Image, 0),
+	}
 
 	modelFile, err := wow.Casc.OpenFileById(uint32(fileDataId), false)
 	if err != nil {
@@ -169,7 +175,7 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 	if err != nil {
 		return nil
 	}
-	m2File.FillModel(&mdl)
+	m2File.FillModel(&mdl, wow.Casc)
 
 	if len(m2File.SkinFileIds) > 0 {
 		skinFile, err := wow.Casc.OpenFileById(uint32(m2File.SkinFileIds[0]), false)
@@ -281,15 +287,16 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 
 	// cache all the model materials
 	var modelMaterials []DBDRecord
-	mdl.SegmentedTextures = make([]model.SegmentedTexture, 0)
 	for modelMaterial := range chrModelMaterialTable.GetFixedRecordsByForeignKey(layoutId) {
 		modelMaterials = append(modelMaterials, modelMaterial)
 		textureType := modelMaterial.GetIntFieldByName("TextureType")
-		mdl.SegmentedTextures = append(mdl.SegmentedTextures, model.SegmentedTexture{
-			Name:     textureTypeNames[uint32(textureType)],
-			Width:    uint(modelMaterial.GetIntFieldByName("Width")),
-			Height:   uint(modelMaterial.GetIntFieldByName("Height")),
-			Segments: make([]model.TextureSegment, 0),
+		mdl.Materials = append(mdl.Materials, model.Material{
+			Name: GetTextureNameFromType(uint32(textureType)),
+			SegmentedTexture: &model.SegmentedTexture{
+				Width:    uint(modelMaterial.GetIntFieldByName("Width")),
+				Height:   uint(modelMaterial.GetIntFieldByName("Height")),
+				Segments: make([]model.TextureSegment, 0),
+			},
 		})
 	}
 
@@ -311,9 +318,9 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 	// setup all the material segments
 	layerMapping := make(map[int64][]int)
 	for _, textureLayer := range textureLayers {
-		textureType := textureLayer.GetIntFieldByName("TextureType")
-		materialIdx := slices.IndexFunc(modelMaterials, func(mat DBDRecord) bool { return mat.GetIntFieldByName("TextureType") == textureType })
-		material := &mdl.SegmentedTextures[materialIdx]
+		materialName := GetTextureNameFromType(uint32(textureLayer.GetIntFieldByName("TextureType")))
+		materialIdx := slices.IndexFunc(mdl.Materials, func(mat model.Material) bool { return mat.Name == materialName })
+		material := mdl.Materials[materialIdx].SegmentedTexture
 
 		textureTargetId := GetSliceFieldByName[int64](textureLayer, "ChrModelTextureTargetID")[0]
 		layerMapping[textureTargetId] = []int{materialIdx, len(material.Segments)}
