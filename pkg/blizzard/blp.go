@@ -1,13 +1,14 @@
 package blizzard
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"image"
 	"io"
 	"os"
 
-	"github.com/mauserzjeh/dxt"
+	"github.com/funatsufumiya/dds-simd/decoder/dxt"
 )
 
 var (
@@ -46,7 +47,7 @@ func (blp BLP) Close() {
 	blp.reader.Close()
 }
 
-func (blp BLP) Decode(level int) (*image.RGBA, error) {
+func (blp BLP) Decode(level int) (image.Image, error) {
 	data, err := blp.getMipmap(level)
 	if err != nil {
 		return nil, ErrInvalidImageFormat
@@ -76,16 +77,16 @@ func (blp BLP) getMipmap(level int) ([]byte, error) {
 	return data, nil
 }
 
-func (blp BLP) decodeDXT(data []byte) (*image.RGBA, error) {
-	var rgbaData []byte
+func (blp BLP) decodeDXT(data []byte) (image.Image, error) {
+	var decoder *dxt.Decoder
 	var err error
 	switch blp.header.AlphaType {
 	case BLPAlphaNone:
-		rgbaData, err = dxt.DecodeDXT1(data, uint(blp.header.Width), uint(blp.header.Height))
+		decoder, err = dxt.New("DXT1", int(blp.header.Width), int(blp.header.Height))
 	case BLPAlphaDXT3:
-		rgbaData, err = dxt.DecodeDXT3(data, uint(blp.header.Width), uint(blp.header.Height))
+		decoder, err = dxt.New("DXT3", int(blp.header.Width), int(blp.header.Height))
 	case BLPAlphaDXT5:
-		rgbaData, err = dxt.DecodeDXT5(data, uint(blp.header.Width), uint(blp.header.Height))
+		decoder, err = dxt.New("DXT5", int(blp.header.Width), int(blp.header.Height))
 	default:
 		return nil, ErrInvalidImageFormat
 	}
@@ -93,11 +94,11 @@ func (blp BLP) decodeDXT(data []byte) (*image.RGBA, error) {
 		return nil, ErrInvalidImageFormat
 	}
 
-	return &image.RGBA{
-		Pix:    rgbaData,
-		Stride: int(blp.header.Width * 4),
-		Rect:   image.Rect(0, 0, int(blp.header.Width), int(blp.header.Height)),
-	}, nil
+	img, err := decoder.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, ErrInvalidImageFormat
+	}
+	return img, nil
 }
 
 const (
