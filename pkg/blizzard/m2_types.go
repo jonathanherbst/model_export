@@ -162,8 +162,12 @@ func (vec *C3Vector) Normalize() {
 	vec.Z = vec.Z / float32(magnitude)
 }
 
-func (vec C3Vector) IntoYUp() C3Vector {
-	return C3Vector{vec.X, vec.Z, -vec.Y}
+func (vec C3Vector) IntoYUp(invertZ bool) C3Vector {
+	var zmult float32 = 1.0
+	if invertZ {
+		zmult = -1.0
+	}
+	return C3Vector{vec.X, vec.Z, zmult * vec.Y}
 }
 
 func (vec C3Vector) IntoArray() [3]float32 {
@@ -212,8 +216,12 @@ type M2F32Quat struct {
 	X, Y, Z, W float32
 }
 
-func (quat M2F32Quat) IntoYUp() M2F32Quat {
-	return M2F32Quat{quat.X, quat.Z, -quat.Y, quat.W}
+func (quat M2F32Quat) IntoYUp(invertZ bool) M2F32Quat {
+	var zmult float32 = 1.0
+	if invertZ {
+		zmult = -1.0
+	}
+	return M2F32Quat{quat.X, quat.Z, zmult * quat.Y, quat.W}
 }
 
 func (quat M2F32Quat) IntoArray() [4]float32 {

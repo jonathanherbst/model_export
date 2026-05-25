@@ -102,10 +102,11 @@ func (skel M2Skeleton) FillModel(mdl *model.Model) {
 		for i, bone := range skel.Bones {
 			mdl.Skeleton.BoneNames[i] = fmt.Sprintf("bone_%s (%d, 0x%08x)", bone.GetName(), bone.KeyBoneId, bone.BoneNameCRC)
 			mdl.Skeleton.BoneParents[i] = int(bone.ParentBone)
+			bonePivot := bone.Pivot.IntoYUp(true)
 			mdl.Skeleton.BoneInvBindMatrices[i] = mgl32.Mat4FromRows(
-				mgl32.Vec4{1.0, 0.0, 0.0, -bone.Pivot.X},
-				mgl32.Vec4{0.0, 1.0, 0.0, -bone.Pivot.Y},
-				mgl32.Vec4{0.0, 0.0, 1.0, -bone.Pivot.Z},
+				mgl32.Vec4{1.0, 0.0, 0.0, -bonePivot.X},
+				mgl32.Vec4{0.0, 1.0, 0.0, -bonePivot.Y},
+				mgl32.Vec4{0.0, 0.0, 1.0, -bonePivot.Z},
 				mgl32.Vec4{0.0, 0.0, 0.0, 1.0},
 			)
 
@@ -117,7 +118,7 @@ func (skel M2Skeleton) FillModel(mdl *model.Model) {
 					Values:        make([]mgl32.Vec3, len(ts)),
 				}
 				for trackIdx, v := range bone.Translation.Values[animIdx] {
-					track.Values[trackIdx] = v.IntoMGL32()
+					track.Values[trackIdx] = v.IntoYUp(true).IntoMGL32()
 				}
 				mdl.Animations[animIdx].TranslationTracks = append(mdl.Animations[animIdx].TranslationTracks, track)
 			}
@@ -130,7 +131,7 @@ func (skel M2Skeleton) FillModel(mdl *model.Model) {
 					Values:        make([]mgl32.Vec4, len(ts)),
 				}
 				for trackIdx, v := range bone.Rotation.Values[animIdx] {
-					track.Values[trackIdx] = v.Decompress().IntoMGL32().Normalize()
+					track.Values[trackIdx] = v.Decompress().IntoYUp(true).IntoMGL32().Normalize()
 				}
 				mdl.Animations[animIdx].RotationTracks = append(mdl.Animations[animIdx].RotationTracks, track)
 			}
@@ -143,7 +144,7 @@ func (skel M2Skeleton) FillModel(mdl *model.Model) {
 					Values:        make([]mgl32.Vec3, len(ts)),
 				}
 				for trackIdx, v := range bone.Scale.Values[animIdx] {
-					track.Values[trackIdx] = v.IntoMGL32()
+					track.Values[trackIdx] = v.IntoYUp(false).IntoMGL32()
 				}
 				mdl.Animations[animIdx].ScaleTracks = append(mdl.Animations[animIdx].ScaleTracks, track)
 			}
