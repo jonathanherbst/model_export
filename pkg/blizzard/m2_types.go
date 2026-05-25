@@ -293,7 +293,8 @@ type M2TextureTransform struct {
 }
 
 type M2Material struct {
-	// Placeholder
+	Flags        uint16
+	BlendingMode uint16
 }
 
 type M2Attachment struct {
