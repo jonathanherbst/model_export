@@ -92,6 +92,8 @@ canvas {
 
 .config-body {
   padding: 4px 0;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .config-option-group {
