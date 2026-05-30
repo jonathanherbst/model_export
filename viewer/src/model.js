@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTF, GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { element, thickness } from 'three/src/nodes/TSL.js';
 
 /**
  * Load a gltf file from a url
@@ -65,11 +64,11 @@ export class Model {
     }
 
     get scene() {
-        return this._gltf.scene
+        return this.#gltf.scene
     }
 
     get animations() {
-        return this._gltf.animations
+        return this.#gltf.animations
     }
 
     /**
@@ -119,6 +118,24 @@ class ModelExportGLTF {
      */
     constructor(gltf) {
         this.gltf = gltf
+        
+        this.material_map = new Map()
+        this.mesh_map = new Map()
+        for(const [three_obj, gltf_obj] of gltf.parser.associations) {
+            if(gltf_obj?.materials && three_obj.isMaterial) {
+                let list = this.material_map.get(gltf_obj.materials)
+                if(list) {
+                    list.push(three_obj)
+                } else {
+                    this.material_map.set(gltf_obj.materials, [three_obj])
+                }
+            }
+
+            if(gltf_obj?.meshes && three_obj.isObject3D) {
+                console.assert(!this.mesh_map.has(gltf_obj.meshes))
+                this.mesh_map.set(gltf_obj.meshes, three_obj)
+            }
+        }
     }
 
     /**
@@ -132,8 +149,8 @@ class ModelExportGLTF {
                 let choice = ext_configs.choices[i]
                 let option = {
                     id: i,
-                    name: choice.option,
-                    color: choice.choice,
+                    name: choice.choice,
+                    color: choice.color,
                 }
                 if(configurations.has(choice.option)) {
                     configurations.get(choice.option).push(option)
@@ -150,14 +167,11 @@ class ModelExportGLTF {
         let elements = new Array()
         const ext_configs = this.gltf.userData.gltfExtensions?.MDLE_Configuration
         if(ext_configs) {
-            for(element of ext_configs.elements) {
+            for(let element of ext_configs.elements) {
                 elements.push({
                     choices: element.choices,
                     materials: element.materials,
-                    meshes: element.meshes.map((mesh_idx) => {
-                        const mesh_name = this.gltf.parser.json.meshes[mesh_idx].name
-                        return this.gltf.scene.getObjectByName(mesh_name)
-                    })
+                    meshes: element.meshes.map((mesh_idx) => this.mesh_map.get(mesh_idx))
                 })
             }
         }
@@ -171,8 +185,13 @@ class ModelExportGLTF {
         let textures = new Map()
         this.gltf.parser.json.materials.forEach((mat, i) => {
             if(mat.extensions?.MDLE_SegmentedTexture) {
-                let material = this.gltf.scene.getObjectByName(mat.name)
-                textures.set(i, new SegmentedTexture(material))
+                let three_mats = this.material_map.get(i)
+                const texture = new SegmentedTexture(three_mats[0])
+                for(let mat of three_mats) {
+                    mat.map = texture
+                }
+
+                textures.set(i, texture)
             }
         })
         return textures
@@ -218,7 +237,7 @@ class SegmentedTexture {
         this.#segments = material.userData.gltfExtensions.MDLE_SegmentedTexture.segments
         this.#canvas = document.createElement("canvas")
         this.#canvas.height = material.userData.gltfExtensions.MDLE_SegmentedTexture.height
-        this.#canvas.width = material.userData.gltfExtensions.MDLE_SegmentedTexture.height
+        this.#canvas.width = material.userData.gltfExtensions.MDLE_SegmentedTexture.width
 
         this.texture = new THREE.CanvasTexture(
             this.#canvas,
@@ -235,11 +254,13 @@ class SegmentedTexture {
      */
     set_segments(images) {
         let ctx = this.#canvas.getContext("2d")
+        ctx.clearRect(0, 0, this.#canvas.width, this.#canvas.height)
         this.#segments.forEach((segment, i) => {
             let img = images.get(i)
             if(img) {
                 ctx.drawImage(img, segment.x, segment.y, segment.width, segment.height)
             }
         })
+        this.texture.needsUpdate = true
     }
 }
