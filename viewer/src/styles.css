@@ -33,6 +33,14 @@ canvas {
   border-radius: 8px;
   padding: 10px;
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+#ui-panel > :not(#config-panel) {
+  display: flex;
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
@@ -57,4 +65,88 @@ canvas {
 #loadingIndicator {
   color: #a8ffe2;
   margin-top: 4px;
+}
+
+#config-panel {
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  padding-top: 4px;
+}
+
+.config-header {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: bold;
+  padding: 4px 0;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.config-header .chevron {
+  font-size: 10px;
+  width: 12px;
+  text-align: center;
+}
+
+.config-body {
+  padding: 4px 0;
+}
+
+.config-option-group {
+  margin-bottom: 8px;
+}
+
+.config-option-group.first {
+  margin-top: 4px;
+}
+
+.config-option-label {
+  font-size: 11px;
+  color: #aaa;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.config-choices-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.config-choice {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+}
+
+.config-choice:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.config-choice.selected {
+  border-color: #4a9eff;
+  background: rgba(74, 158, 255, 0.15);
+}
+
+.config-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+}
+
+.config-choice-name {
+  white-space: nowrap;
 }

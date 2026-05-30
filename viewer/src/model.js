@@ -64,11 +64,11 @@ export class Model {
     }
 
     get scene() {
-        return this.#gltf.scene
+        return this.#gltf.gltf.scene
     }
 
     get animations() {
-        return this.#gltf.animations
+        return this.#gltf.gltf.animations
     }
 
     /**
@@ -79,7 +79,9 @@ export class Model {
 
         // disable all the meshes
         this.#config_meshes.forEach((mesh) => {
-            mesh.visible = false
+            if(mesh) {
+                mesh.visible = false
+            }
         })
 
         let texture_configs = new Map()
@@ -122,7 +124,7 @@ class ModelExportGLTF {
         this.material_map = new Map()
         this.mesh_map = new Map()
         for(const [three_obj, gltf_obj] of gltf.parser.associations) {
-            if(gltf_obj?.materials && three_obj.isMaterial) {
+            if(gltf_obj?.materials !== undefined && three_obj.isMaterial) {
                 let list = this.material_map.get(gltf_obj.materials)
                 if(list) {
                     list.push(three_obj)
@@ -131,7 +133,7 @@ class ModelExportGLTF {
                 }
             }
 
-            if(gltf_obj?.meshes && three_obj.isObject3D) {
+            if(gltf_obj?.meshes !== undefined && three_obj.isObject3D) {
                 console.assert(!this.mesh_map.has(gltf_obj.meshes))
                 this.mesh_map.set(gltf_obj.meshes, three_obj)
             }
@@ -168,10 +170,17 @@ class ModelExportGLTF {
         const ext_configs = this.gltf.userData.gltfExtensions?.MDLE_Configuration
         if(ext_configs) {
             for(let element of ext_configs.elements) {
+                const meshes = element.meshes.map((mesh_idx) => {
+                    const mesh = this.mesh_map.get(mesh_idx)
+                    if(!mesh) {
+                        console.error("element references a nonexistent mesh id", element)
+                    }
+                    return mesh
+                })
                 elements.push({
                     choices: element.choices,
                     materials: element.materials,
-                    meshes: element.meshes.map((mesh_idx) => this.mesh_map.get(mesh_idx))
+                    meshes: meshes,
                 })
             }
         }
@@ -188,7 +197,7 @@ class ModelExportGLTF {
                 let three_mats = this.material_map.get(i)
                 const texture = new SegmentedTexture(three_mats[0])
                 for(let mat of three_mats) {
-                    mat.map = texture
+                    mat.map = texture.texture
                 }
 
                 textures.set(i, texture)
@@ -239,14 +248,22 @@ class SegmentedTexture {
         this.#canvas.height = material.userData.gltfExtensions.MDLE_SegmentedTexture.height
         this.#canvas.width = material.userData.gltfExtensions.MDLE_SegmentedTexture.width
 
-        this.texture = new THREE.CanvasTexture(
-            this.#canvas,
-            material.map.mapping,
-            material.map.wrapS,
-            material.map.wrapT,
-            material.map.magFilter,
-            material.map.minFilter,
-        )
+        this.texture = new THREE.CanvasTexture(this.#canvas)
+        const srcMap = material.map
+        this.texture.mapping = srcMap.mapping
+        this.texture.wrapS = srcMap.wrapS
+        this.texture.wrapT = srcMap.wrapT
+        this.texture.magFilter = srcMap.magFilter
+        this.texture.minFilter = srcMap.minFilter
+        this.texture.channel = srcMap.channel
+        this.texture.flipY = srcMap.flipY
+        this.texture.generateMipmaps = srcMap.generateMipmaps
+        this.texture.colorSpace = srcMap.colorSpace
+        this.texture.anisotropy = srcMap.anisotropy
+        this.texture.offset = srcMap.offset
+        this.texture.repeat = srcMap.repeat
+        this.texture.rotation = srcMap.rotation
+        this.texture.needsUpdate = true
     }
 
     /**
