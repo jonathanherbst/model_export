@@ -358,6 +358,7 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 			component := model.ConfigElement{
 				ChoiceIdxes: []int{choiceIdx},
 				Materials:   make([]model.ConfigMaterial, 0),
+				MeshIdxes:   make([]int, 0),
 			}
 
 			relatedChoiceId := uint32(custElement.GetIntFieldByName("RelatedChrCustomizationChoiceID"))
@@ -373,7 +374,7 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 					meshName := GetMeshName(uint16(geosetType*100 + geosetSubId))
 					meshIdx := slices.IndexFunc(mdl.Skin.Meshes, func(mesh model.Mesh) bool { return mesh.Name == meshName })
 					if meshIdx != -1 {
-						component.MeshIdxes = []int{meshIdx}
+						component.MeshIdxes = append(component.MeshIdxes, meshIdx)
 					}
 				} else {
 					panic("geoset not found")

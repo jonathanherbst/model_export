@@ -126,10 +126,11 @@ func ExportGLTF(mdl Model, path string) error {
 		skinIdx = new(0)
 	}
 
+	meshMapping := make(map[int]int)
 	if mdl.Skin != nil {
 		// we have a skin so set it up
 		doc.Meshes = make([]*gltf.Mesh, 0)
-		for _, submesh := range mdl.Skin.Meshes {
+		for meshId, submesh := range mdl.Skin.Meshes {
 			if !submesh.IsEquipment {
 				indices := make([]uint16, len(submesh.VertexMap))
 				for mapIdx, idx := range submesh.VertexMap {
@@ -145,6 +146,7 @@ func ExportGLTF(mdl Model, path string) error {
 				}
 
 				meshIdx := len(doc.Meshes)
+				meshMapping[meshId] = meshIdx
 				doc.Meshes = append(doc.Meshes, &gltf.Mesh{
 					Name: fmt.Sprintf("Mesh%s", submesh.Name),
 					Primitives: []*gltf.Primitive{{
@@ -241,10 +243,24 @@ func ExportGLTF(mdl Model, path string) error {
 		}
 	}
 
+	// we filtered out some of the meshes so we need to remap them to the proper indexes
+	elements := make([]ConfigElement, len(mdl.Elements))
+	for i, element := range mdl.Elements {
+		meshIdxes := make([]int, len(element.MeshIdxes))
+		for i, meshIdx := range element.MeshIdxes {
+			meshIdxes[i] = meshMapping[meshIdx]
+		}
+		elements[i] = ConfigElement{
+			ChoiceIdxes: element.ChoiceIdxes,
+			Materials:   element.Materials,
+			MeshIdxes:   meshIdxes,
+		}
+	}
+
 	doc.Extensions = gltf.Extensions{
 		CONFIGURATION_NAME: ConfigExtension{
 			Choices:  mdl.Choices,
-			Elements: mdl.Elements,
+			Elements: elements,
 		},
 	}
 
