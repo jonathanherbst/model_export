@@ -1,8 +1,11 @@
 function uint32ToCss(color) {
-  const a = (color >>> 24) & 0xff;
+  let a = (color >>> 24) & 0xff;
   const r = (color >>> 16) & 0xff;
   const g = (color >>> 8) & 0xff;
   const b = color & 0xff;
+  if(a == 0) {
+    a = 255
+  }
   return `rgba(${r},${g},${b},${(a / 255).toFixed(2)})`;
 }
 
@@ -40,7 +43,7 @@ export function setupConfigPanel(configurations, onChange) {
     const choicesRow = document.createElement('div');
     choicesRow.className = 'config-choices-row';
 
-    for (const choice of choices) {
+    choices.forEach((choice, choiceIdx) => {
       const item = document.createElement('div');
       item.className = 'config-choice';
 
@@ -68,7 +71,7 @@ export function setupConfigPanel(configurations, onChange) {
       ) {
         const nameSpan = document.createElement('span');
         nameSpan.className = 'config-choice-name';
-        nameSpan.textContent = `Option ${choice.id}`;
+        nameSpan.textContent = `${optionName} ${choiceIdx + 1}`;
         item.appendChild(nameSpan);
       }
 
@@ -87,7 +90,7 @@ export function setupConfigPanel(configurations, onChange) {
       });
 
       choicesRow.appendChild(item);
-    }
+    })
 
     groupEl.appendChild(choicesRow);
     panelBody.appendChild(groupEl);
