@@ -371,9 +371,10 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 				if geoset := chrCustGeosetCache.GetFixedRecordById(uint32(geosetId)); geoset != nil {
 					geosetType := geoset.GetIntFieldByName("GeosetType")
 					geosetSubId := geoset.GetIntFieldByName("GeosetID")
-					meshName := GetMeshName(uint16(geosetType*100 + geosetSubId))
+					geosetId := uint16(geosetType*100 + geosetSubId)
+					meshName := GetMeshName(geosetId)
 					meshIdx := slices.IndexFunc(mdl.Skin.Meshes, func(mesh model.Mesh) bool { return mesh.Name == meshName })
-					if meshIdx != -1 {
+					if meshIdx != -1 && geosetId != 0 {
 						component.MeshIdxes = append(component.MeshIdxes, meshIdx)
 					}
 				} else {
