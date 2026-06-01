@@ -4,6 +4,7 @@ import (
 	"image"
 
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/qmuntal/gltf"
 	"golang.org/x/image/draw"
 )
 
@@ -128,8 +129,18 @@ const (
 	InterpolationCubicHermite
 )
 
+type WrappingMode gltf.WrappingMode
+
+const (
+	WrapRepeat         WrappingMode = WrappingMode(gltf.WrapRepeat)
+	WrapClampToEdge                 = gltf.WrapClampToEdge
+	WrapMirroredRepeat              = gltf.WrapMirroredRepeat
+)
+
 type Material struct {
 	Name             string
 	ImageIdx         *int
 	SegmentedTexture *SegmentedTexture
+	HorizontalWrap   WrappingMode
+	VerticalWrap     WrappingMode
 }

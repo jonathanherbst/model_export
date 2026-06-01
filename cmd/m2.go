@@ -94,6 +94,7 @@ var m2Cmd = &cobra.Command{
 			fmt.Printf("Skin file ids: %v\n", m2.SkinFileIds)
 			fmt.Printf("Skel file ids: %v\n", m2.SkelFileIds)
 			fmt.Printf("Texture file ids: %v\n", m2.TextureFileIds)
+			fmt.Printf("Materials: %v\n", m2.Materials)
 			if skin != nil {
 				fmt.Printf("Skin: %d meshes\n", len(skin.Meshes))
 				for _, submesh := range skin.Meshes {

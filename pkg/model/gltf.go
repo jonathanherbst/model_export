@@ -206,12 +206,7 @@ func ExportGLTF(mdl Model, path string) error {
 
 	defaultTextures := mdl.MakeDefaultTextures()
 
-	doc.Samplers = []*gltf.Sampler{{
-		MagFilter: gltf.MagLinear,
-		MinFilter: gltf.MinLinearMipMapLinear,
-		WrapS:     gltf.WrapClampToEdge,
-		WrapT:     gltf.WrapClampToEdge,
-	}}
+	doc.Samplers = make([]*gltf.Sampler, len(mdl.Materials))
 	doc.Textures = make([]*gltf.Texture, len(mdl.Materials))
 	doc.Materials = make([]*gltf.Material, len(mdl.Materials))
 	for i, mat := range mdl.Materials {
@@ -222,9 +217,16 @@ func ExportGLTF(mdl Model, path string) error {
 			panic("failed to write image to the gltf doc")
 		}
 
+		doc.Samplers[i] = &gltf.Sampler{
+			MagFilter: gltf.MagLinear,
+			MinFilter: gltf.MinLinearMipMapLinear,
+			WrapS:     gltf.WrappingMode(mat.HorizontalWrap),
+			WrapT:     gltf.WrappingMode(mat.VerticalWrap),
+		}
+
 		doc.Textures[i] = &gltf.Texture{
 			Source:  new(imgIdx),
-			Sampler: new(0),
+			Sampler: new(i),
 		}
 
 		doc.Materials[i] = &gltf.Material{

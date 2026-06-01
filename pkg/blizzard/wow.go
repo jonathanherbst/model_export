@@ -297,6 +297,8 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 				Height:   uint(modelMaterial.GetIntFieldByName("Height")),
 				Segments: make([]model.TextureSegment, 0),
 			},
+			HorizontalWrap: model.WrapRepeat,
+			VerticalWrap:   model.WrapRepeat,
 		})
 	}
 
