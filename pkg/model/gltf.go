@@ -218,8 +218,7 @@ func ExportGLTF(mdl Model, path string) error {
 		}
 
 		doc.Samplers[i] = &gltf.Sampler{
-			MagFilter: gltf.MagLinear,
-			MinFilter: gltf.MinLinearMipMapLinear,
+			MinFilter: gltf.MinNearest,
 			WrapS:     gltf.WrappingMode(mat.HorizontalWrap),
 			WrapT:     gltf.WrappingMode(mat.VerticalWrap),
 		}
@@ -236,6 +235,7 @@ func ExportGLTF(mdl Model, path string) error {
 				MetallicFactor:   new(0.0),
 				RoughnessFactor:  new(1.0),
 			},
+			DoubleSided: true,
 		}
 
 		if mat.SegmentedTexture != nil {

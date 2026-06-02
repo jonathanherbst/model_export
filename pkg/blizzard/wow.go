@@ -374,10 +374,13 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 					geosetType := geoset.GetIntFieldByName("GeosetType")
 					geosetSubId := geoset.GetIntFieldByName("GeosetID")
 					geosetId := uint16(geosetType*100 + geosetSubId)
-					meshName := GetMeshName(geosetId)
-					meshIdx := slices.IndexFunc(mdl.Skin.Meshes, func(mesh model.Mesh) bool { return mesh.Name == meshName })
-					if meshIdx != -1 && geosetId != 0 {
-						component.MeshIdxes = append(component.MeshIdxes, meshIdx)
+					if geosetId != 0 {
+						meshName := GetMeshName(geosetId)
+						for meshIdx, mesh := range mdl.Skin.Meshes {
+							if mesh.Name == meshName {
+								component.MeshIdxes = append(component.MeshIdxes, meshIdx)
+							}
+						}
 					}
 				} else {
 					panic("geoset not found")
