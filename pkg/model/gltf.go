@@ -259,10 +259,20 @@ func ExportGLTF(mdl Model, path string) error {
 		}
 	}
 
+	static_meshes := make([]int, 0)
+	for i, mesh := range mdl.Skin.Meshes {
+		if mesh.IsStatic {
+			if meshIdx, ok := meshMapping[i]; ok {
+				static_meshes = append(static_meshes, meshIdx)
+			}
+		}
+	}
+
 	doc.Extensions = gltf.Extensions{
 		CONFIGURATION_NAME: ConfigExtension{
-			Choices:  mdl.Choices,
-			Elements: elements,
+			Choices:      mdl.Choices,
+			Elements:     elements,
+			StaticMeshes: static_meshes,
 		},
 	}
 

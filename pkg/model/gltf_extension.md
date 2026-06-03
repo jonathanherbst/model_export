@@ -38,6 +38,8 @@ This extension gets added to the document to define all the configuration choice
 
 Elements define how choices map to geosets and materials.  Each element has a list of choice indices within the choices list, all of which should be selected by the UI for the element to be applied.  Applying the element requires enabling all the materials defined in the materials list and the mesh ids defined in the meshes list.  A material has an index into the document materials array which points to a segmented texture material, the segment field defines an index into the material's segments array, and the image field defines an index into the document's image list to be applied to the material using the segment definition.
 
+Static meshes are meshes that aren't affected by configurations, what this does is help the renderer figure out what meshes to enable before applying configurations.
+
 ```json
 {
   "choices": [
@@ -59,6 +61,7 @@ Elements define how choices map to geosets and materials.  Each element has a li
       ],
       "meshes": [0]
     }
-  ]
+  ],
+  "static_meshes": [0, 1]
 }
 ```

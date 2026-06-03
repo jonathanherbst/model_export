@@ -46,6 +46,9 @@ export class Model {
     /** @type {Set<THREE.Mesh>} */
     #config_meshes;
 
+    /** @type {Set<number>} */
+    #static_meshes;
+
     /**
      * @param {GLTF} gltf 
      */
@@ -61,6 +64,7 @@ export class Model {
                 this.#config_meshes.add(mesh)
             })
         })
+        this.#static_meshes = this.#gltf.load_static_meshes()
     }
 
     get scene() {
@@ -77,12 +81,14 @@ export class Model {
     async set_enabled_choices(enabled_choices) {
         this.#enabled_choices = enabled_choices
 
-        // disable all the meshes
-        this.#config_meshes.forEach((mesh) => {
-            if(mesh) {
-                mesh.visible = false
+        // reset all the meshes
+        for(let [meshIdx, mesh] of this.#gltf.mesh_map) {
+            if(this.#static_meshes.has(meshIdx)) {
+                mesh.visible = true;
+            } else {
+                mesh.visible = false;
             }
-        })
+        }
 
         let texture_configs = new Map()
         for(let element of this.#config_elements) {
@@ -115,6 +121,9 @@ export class Model {
 }
 
 class ModelExportGLTF {
+    /** @type {Map<number, THREE.Mesh>} */
+    mesh_map;
+
     /**
      * @param {GLTF} gltf 
      */
@@ -204,6 +213,17 @@ class ModelExportGLTF {
             }
         })
         return textures
+    }
+
+    /**
+     * @returns {Set<number>}
+     */
+    load_static_meshes() {
+        const ext_configs = this.gltf.userData.gltfExtensions?.MDLE_Configuration
+        if(ext_configs) {
+            return new Set(ext_configs.static_meshes)
+        }
+        return new Set()
     }
 
     /**

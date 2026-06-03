@@ -93,6 +93,7 @@ type Skin struct {
 type Mesh struct {
 	Name          string
 	IsEquipment   bool
+	IsStatic      bool
 	VertexMap     []int
 	MaterialName  string
 	RenderProcess RenderProcess

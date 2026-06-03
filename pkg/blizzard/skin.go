@@ -59,6 +59,7 @@ func (skin M2Skin) FillModel(mdl *model.Model, m2 M2) {
 	for i, mesh := range skin.Meshes {
 		mdl.Skin.Meshes[i].Name = GetMeshName(mesh.Id)
 		mdl.Skin.Meshes[i].IsEquipment = IsGeosetEquipment(mesh.Id)
+		mdl.Skin.Meshes[i].IsStatic = IsGeosetStatic(mesh.Id)
 		mdl.Skin.Meshes[i].RenderProcess = model.RenderTriangles
 		mdl.Skin.Meshes[i].VertexMap = make([]int, len(mesh.LocalVertexIdxes))
 		for mapIdx, vertexIdx := range mesh.LocalVertexIdxes {

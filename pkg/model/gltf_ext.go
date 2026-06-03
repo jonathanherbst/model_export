@@ -19,8 +19,9 @@ type SegmentedTexture struct {
 const CONFIGURATION_NAME string = "MDLE_Configuration"
 
 type ConfigExtension struct {
-	Choices  []ConfigChoice  `json:"choices"`
-	Elements []ConfigElement `json:"elements"`
+	Choices      []ConfigChoice  `json:"choices"`
+	Elements     []ConfigElement `json:"elements"`
+	StaticMeshes []int           `json:"static_meshes"`
 }
 
 type ConfigChoice struct {
