@@ -76,6 +76,27 @@ export class Model {
     }
 
     /**
+     * @returns {{ name: string, canvas: HTMLCanvasElement, width: number, height: number }[]}
+     */
+    getMaterials() {
+        const result = []
+        this.#gltf.gltf.parser.json.materials.forEach((mat, i) => {
+            if(mat.extensions?.MDLE_SegmentedTexture) {
+                const tex = this.#segmented_textures.get(i)
+                if(tex) {
+                    result.push({
+                        name: tex.name || `Material ${i}`,
+                        canvas: tex.canvas,
+                        width: tex.canvas.width,
+                        height: tex.canvas.height,
+                    })
+                }
+            }
+        })
+        return result
+    }
+
+    /**
      * @param {Set<number>} enabled_choices 
      */
     async set_enabled_choices(enabled_choices) {
@@ -257,6 +278,10 @@ class SegmentedTexture {
 
     /** @type {TextureSegment[]} */
     #segments;
+
+    get canvas() {
+        return this.#canvas
+    }
 
     /**
      * @param {THREE.Material} material 

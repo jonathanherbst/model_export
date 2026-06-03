@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { setupConfigPanel } from './config-ui.js';
+import { setupMaterialsPanel } from './materials-ui.js';
 import { load_gltf } from './model.js';
 
 const container = document.getElementById('viewer-container');
@@ -40,6 +41,7 @@ scene.add(directionalLight);
 
 const animationSelect = document.getElementById('animationSelect');
 const animationLabel = document.getElementById('animationLabel');
+const materialsButton = document.getElementById('materialsButton');
 
 const clock = new THREE.Clock();
 let currentModel = null;
@@ -48,6 +50,7 @@ let activeAction = null;
 let currentAnimations = [];
 let activeBlobUrl = null;
 let configPanelApi = null;
+let materialsPanel = null;
 
 function showError(message) {
   if (!message) {
@@ -92,6 +95,14 @@ function clearModel() {
     configPanel.remove();
   }
   configPanelApi = null;
+
+  if (materialsPanel) {
+    materialsPanel.dispose();
+    materialsPanel = null;
+  }
+  if (materialsButton) {
+    materialsButton.disabled = true;
+  }
 }
 
 function focusModel(object) {
@@ -218,6 +229,9 @@ async function loadModel(url) {
       model.set_enabled_choices(new Set(defaultIds));
     }
 
+    materialsPanel = setupMaterialsPanel(model, {});
+    materialsButton.disabled = false;
+
     focusModel(model.scene);
     showLoading('');
   } catch (error) {
@@ -249,6 +263,12 @@ fileInput.addEventListener('change', async (event) => {
 
   activeBlobUrl = URL.createObjectURL(file);
   loadModel(activeBlobUrl);
+});
+
+materialsButton.addEventListener('click', () => {
+  if (materialsPanel) {
+    materialsPanel.open();
+  }
 });
 
 animationSelect.addEventListener('change', () => {
