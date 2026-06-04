@@ -52,7 +52,7 @@ type M2Skin struct {
 	Batches        []M2Batch
 }
 
-func (skin M2Skin) FillModel(mdl *model.Model, m2 M2) {
+func (skin M2Skin) FillModel(mdl *model.Model) {
 	mdl.Skin = &model.Skin{
 		Meshes: make([]model.Mesh, len(skin.Meshes)),
 	}
@@ -64,16 +64,6 @@ func (skin M2Skin) FillModel(mdl *model.Model, m2 M2) {
 		mdl.Skin.Meshes[i].VertexMap = make([]int, len(mesh.LocalVertexIdxes))
 		for mapIdx, vertexIdx := range mesh.LocalVertexIdxes {
 			mdl.Skin.Meshes[i].VertexMap[mapIdx] = int(skin.VertexIdxes[vertexIdx])
-		}
-	}
-
-	for _, batch := range skin.Batches {
-		textureType := m2.Textures[batch.TextureComboIndex].Type
-		if textureType != 0 {
-			mdl.Skin.Meshes[batch.SkinSectionIndex].MaterialName = GetTextureNameFromType(textureType)
-		} else if int(batch.TextureComboIndex) < len(m2.TextureFileIds) {
-			texFileId := m2.TextureFileIds[batch.TextureComboIndex]
-			mdl.Skin.Meshes[batch.SkinSectionIndex].MaterialName = GetTextureNameFromFileId(texFileId)
 		}
 	}
 }

@@ -138,10 +138,20 @@ const (
 	WrapMirroredRepeat              = gltf.WrapMirroredRepeat
 )
 
+type AlphaMode gltf.AlphaMode
+
+const (
+	AlphaOpaque AlphaMode = AlphaMode(gltf.AlphaOpaque)
+	AlphaMask             = AlphaMode(gltf.AlphaMask)
+	AlphaBlend            = AlphaMode(gltf.AlphaBlend)
+)
+
 type Material struct {
 	Name             string
 	ImageIdx         *int
 	SegmentedTexture *SegmentedTexture
 	HorizontalWrap   WrappingMode
 	VerticalWrap     WrappingMode
+	DoubleSided      bool
+	AlphaMode        AlphaMode
 }

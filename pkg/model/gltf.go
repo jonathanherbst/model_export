@@ -235,7 +235,9 @@ func ExportGLTF(mdl Model, path string) error {
 				MetallicFactor:   new(0.0),
 				RoughnessFactor:  new(1.0),
 			},
-			DoubleSided: true,
+			DoubleSided: mat.DoubleSided,
+			AlphaMode:   gltf.AlphaMode(mat.AlphaMode),
+			AlphaCutoff: new(0.5),
 		}
 
 		if mat.SegmentedTexture != nil {

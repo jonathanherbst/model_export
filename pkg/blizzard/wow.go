@@ -177,6 +177,7 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 	}
 	m2File.FillModel(&mdl, wow.Casc)
 
+	m2Materials := make(map[string]M2Material)
 	if len(m2File.SkinFileIds) > 0 {
 		skinFile, err := wow.Casc.OpenFileById(uint32(m2File.SkinFileIds[0]), false)
 		if err != nil {
@@ -190,7 +191,21 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 		if err != nil {
 			return nil
 		}
-		skin.FillModel(&mdl, *m2File)
+		skin.FillModel(&mdl)
+
+		for _, batch := range skin.Batches {
+			textureType := m2File.Textures[batch.TextureComboIndex].Type
+			if textureType != 0 {
+				mdl.Skin.Meshes[batch.SkinSectionIndex].MaterialName = GetTextureNameFromType(textureType)
+			} else if int(batch.TextureComboIndex) < len(m2File.TextureFileIds) {
+				texFileId := m2File.TextureFileIds[batch.TextureComboIndex]
+				mdl.Skin.Meshes[batch.SkinSectionIndex].MaterialName = GetTextureNameFromFileId(texFileId)
+			} else {
+				// not sure what to do in this case yet
+				continue
+			}
+			m2Materials[mdl.Skin.Meshes[batch.SkinSectionIndex].MaterialName] = m2File.Materials[batch.MaterialIndex]
+		}
 	}
 
 	for _, skelFileId := range m2File.SkelFileIds {
@@ -206,6 +221,22 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 	}
 
 	wow.loadConfigurationOptions(&mdl, *modelRecord)
+
+	for i, mat := range mdl.Materials {
+		if m2Material, ok := m2Materials[mat.Name]; ok {
+			if m2Material.Flags&0x04 != 0 {
+				mdl.Materials[i].DoubleSided = true
+			}
+			switch m2Material.BlendingMode {
+			case 0:
+				mdl.Materials[i].AlphaMode = model.AlphaOpaque
+			case 1:
+				mdl.Materials[i].AlphaMode = model.AlphaMask
+			default:
+				mdl.Materials[i].AlphaMode = model.AlphaBlend
+			}
+		}
+	}
 
 	return &mdl
 }
