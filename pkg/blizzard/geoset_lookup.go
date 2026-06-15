@@ -76,4 +76,5 @@ func IsGeosetEquipment(id uint16) bool {
 func IsGeosetStatic(id uint16) bool {
 	groupId := id / 100
 	return id == 0 || id == 401 || id == 501 || id == 1301 || id == 1801 || id == 2001 || id == 2201 || id == 2301 || id == 3301 || groupId == 32
+	// so some models use the HeadSwap meshes to build different parts of the face (night elf female) and some use them for different face options (human female)
 }

@@ -223,7 +223,7 @@ class ModelExportGLTF {
     load_segmented_textures() {
         let textures = new Map()
         this.gltf.parser.json.materials.forEach((mat, i) => {
-            if(mat.extensions?.MDLE_SegmentedTexture) {
+            if(mat.extensions?.MDLE_SegmentedTexture && this.material_map.has(i)) {
                 let three_mats = this.material_map.get(i)
                 const texture = new SegmentedTexture(three_mats[0])
                 for(let mat of three_mats) {

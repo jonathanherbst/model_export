@@ -42,9 +42,9 @@ func M2FromReader(r io.Reader) (*M2, error) {
 
 			// load textures with lookup table
 			textures := md20.MD20Header.Textures.Load(data, 0)
-			textureLookup := md20.MD20Header.TextureCombos.Load(data, 0)
-			m2.Textures = make([]M2Texture, len(textureLookup))
-			for i, ti := range textureLookup {
+			m2.textureLookup = md20.MD20Header.TextureCombos.Load(data, 0)
+			m2.Textures = make([]M2Texture, len(m2.textureLookup))
+			for i, ti := range m2.textureLookup {
 				m2.Textures[i] = textures[ti]
 			}
 			m2.Materials = md20.MD20Header.Materials.Load(data, 0)
@@ -56,8 +56,13 @@ func M2FromReader(r io.Reader) (*M2, error) {
 			m2.SkelFileIds = make([]uint32, len(data)/4)
 			binary.Decode(data, binary.LittleEndian, m2.SkelFileIds)
 		case "TXID":
-			m2.TextureFileIds = make([]uint32, len(data)/4)
-			binary.Decode(data, binary.LittleEndian, m2.TextureFileIds)
+			// tdixs are indexed by combo lookup too
+			textureFileIds := make([]uint32, len(data)/4)
+			binary.Decode(data, binary.LittleEndian, textureFileIds)
+			m2.TextureFileIds = make([]uint32, len(m2.textureLookup))
+			for i, ti := range m2.textureLookup {
+				m2.TextureFileIds[i] = textureFileIds[ti]
+			}
 		}
 	}
 	return &m2, nil
@@ -72,6 +77,7 @@ type M2 struct {
 	TextureFileIds []uint32
 	Textures       []M2Texture
 	Materials      []M2Material
+	textureLookup  []uint16
 }
 
 func (m2 M2) FillModel(mdl *model.Model, casc *Casc) {

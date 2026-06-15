@@ -197,7 +197,7 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 			textureType := m2File.Textures[batch.TextureComboIndex].Type
 			if textureType != 0 {
 				mdl.Skin.Meshes[batch.SkinSectionIndex].MaterialName = GetTextureNameFromType(textureType)
-			} else if int(batch.TextureComboIndex) < len(m2File.TextureFileIds) {
+			} else if int(batch.TextureComboIndex) < len(m2File.TextureFileIds) && m2File.TextureFileIds[batch.TextureComboIndex] > 0 {
 				texFileId := m2File.TextureFileIds[batch.TextureComboIndex]
 				mdl.Skin.Meshes[batch.SkinSectionIndex].MaterialName = GetTextureNameFromFileId(texFileId)
 			} else {
