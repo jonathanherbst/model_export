@@ -222,6 +222,12 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 
 	wow.loadConfigurationOptions(&mdl, *modelRecord)
 
+	for _, e := range mdl.Elements {
+		for _, meshIdx := range e.MeshIdxes {
+			mdl.Skin.Meshes[meshIdx].IsStatic = false
+		}
+	}
+
 	for i, mat := range mdl.Materials {
 		if m2Material, ok := m2Materials[mat.Name]; ok {
 			if m2Material.Flags&0x04 != 0 {
