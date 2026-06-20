@@ -84,7 +84,7 @@ func (skel M2Skeleton) FillModel(mdl *model.Model, casc *Casc) {
 	if len(skel.Sequences) > 0 {
 		mdl.Animations = make([]model.Animation, len(skel.Sequences))
 		for i, seq := range skel.Sequences {
-			mdl.Animations[i].Name = fmt.Sprintf("%d_%d", seq.ID, seq.VariationIndex)
+			mdl.Animations[i].Name = GetAnimationName(seq.ID, seq.VariationIndex)
 			mdl.Animations[i].Duration = float32(seq.Duration) / 1000.0
 			mdl.Animations[i].TranslationTracks = make([]model.AnimationTrack[mgl32.Vec3], 0)
 			mdl.Animations[i].RotationTracks = make([]model.AnimationTrack[mgl32.Vec4], 0)
@@ -98,7 +98,7 @@ func (skel M2Skeleton) FillModel(mdl *model.Model, casc *Casc) {
 		if err != nil {
 			continue
 		}
-		name := fmt.Sprintf("%d_%d", anim.AnimId, anim.SubAnimId)
+		name := GetAnimationName(anim.AnimId, anim.SubAnimId)
 		i := slices.IndexFunc(mdl.Animations, func(a model.Animation) bool { return name == a.Name })
 		animDataLookup[i] = M2AnimFromReader(animFile).BoneData()
 	}
