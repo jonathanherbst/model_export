@@ -248,6 +248,10 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 }
 
 func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRecord) {
+	disabledTextureTargets := []int64{
+		36, // EYE_GLOW_FACE_OVERLAY (Makes Night Elf Eyes look weird)
+	}
+
 	custOptionTable, err := wow.GetTable("ChrCustomizationOption")
 	if err != nil {
 		panic("no ChrCustomizationOption table")
@@ -362,6 +366,9 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 		material := mdl.Materials[materialIdx].SegmentedTexture
 
 		textureTargetId := GetSliceFieldByName[int64](textureLayer, "ChrModelTextureTargetID")[0]
+		if slices.Index(disabledTextureTargets, textureTargetId) != -1 {
+			continue
+		}
 		layerMapping[textureTargetId] = []int{materialIdx, len(material.Segments)}
 
 		sectionTypeBitmask := textureLayer.GetIntFieldByName("TextureSectionTypeBitMask")
@@ -428,37 +435,35 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 			material := custMaterialCache.GetFixedRecordById(materialId)
 			if material != nil {
 				textureTargetId := material.GetIntFieldByName("ChrModelTextureTargetID")
-				matInfo, ok := layerMapping[textureTargetId]
-				if !ok {
-					panic("configuration references a textureTargetId we don't know about")
-				}
-				textureSegment := model.ConfigMaterial{
-					MaterialIdx: matInfo[0],
-					SegmentIdx:  matInfo[1],
-				}
+				if matInfo, ok := layerMapping[textureTargetId]; ok {
+					textureSegment := model.ConfigMaterial{
+						MaterialIdx: matInfo[0],
+						SegmentIdx:  matInfo[1],
+					}
 
-				resourcesId := material.GetIntFieldByName("MaterialResourcesID")
-				for textureFileData := range textureFileDataCache.GetFixedRecordsByForeignKey(uint32(resourcesId)) {
-					textureFileId := textureFileData.GetID()
-					if idx, ok := imageMap[textureFileId]; ok {
-						textureSegment.ImageIdx = idx
-						break
-					} else {
-						// what do I do with multiple texture file datas?
-						if textureFile, err := wow.Casc.OpenFileById(textureFileData.GetID(), false); err == nil {
-							if blp, err := BLPFromReader(textureFile); err == nil {
-								if img, err := blp.Decode(0); err == nil {
-									imgIdx := len(mdl.Images)
-									mdl.Images = append(mdl.Images, img)
-									imageMap[textureFileId] = imgIdx
-									textureSegment.ImageIdx = imgIdx
-									break
+					resourcesId := material.GetIntFieldByName("MaterialResourcesID")
+					for textureFileData := range textureFileDataCache.GetFixedRecordsByForeignKey(uint32(resourcesId)) {
+						textureFileId := textureFileData.GetID()
+						if idx, ok := imageMap[textureFileId]; ok {
+							textureSegment.ImageIdx = idx
+							break
+						} else {
+							// what do I do with multiple texture file datas?
+							if textureFile, err := wow.Casc.OpenFileById(textureFileData.GetID(), false); err == nil {
+								if blp, err := BLPFromReader(textureFile); err == nil {
+									if img, err := blp.Decode(0); err == nil {
+										imgIdx := len(mdl.Images)
+										mdl.Images = append(mdl.Images, img)
+										imageMap[textureFileId] = imgIdx
+										textureSegment.ImageIdx = imgIdx
+										break
+									}
 								}
 							}
 						}
 					}
+					component.Materials = append(component.Materials, textureSegment)
 				}
-				component.Materials = append(component.Materials, textureSegment)
 			}
 			mdl.Elements = append(mdl.Elements, component)
 		}
