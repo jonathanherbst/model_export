@@ -4,7 +4,11 @@ import "fmt"
 
 func GetAnimationName(id uint16, subId uint16) string {
 	if name, ok := AnimationNames[id]; ok {
-		return fmt.Sprintf("%s %d", name, subId)
+		if subId == 0 {
+			return name
+		} else {
+			return fmt.Sprintf("%s %d", name, subId)
+		}
 	}
 	return fmt.Sprintf("Unknown (%d, %d)", id, subId)
 }

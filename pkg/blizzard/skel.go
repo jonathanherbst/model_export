@@ -7,6 +7,7 @@ import (
 	"jph/model-export/pkg/model"
 	"os"
 	"slices"
+	"sort"
 
 	"github.com/go-gl/mathgl/mgl32"
 )
@@ -81,14 +82,20 @@ type M2Skeleton struct {
 }
 
 func (skel M2Skeleton) FillModel(mdl *model.Model, casc *Casc) {
+	type animationWithOrder struct {
+		order     int
+		animation model.Animation
+	}
+
+	animOrder := make([]animationWithOrder, len(skel.Sequences))
 	if len(skel.Sequences) > 0 {
-		mdl.Animations = make([]model.Animation, len(skel.Sequences))
 		for i, seq := range skel.Sequences {
-			mdl.Animations[i].Name = GetAnimationName(seq.ID, seq.VariationIndex)
-			mdl.Animations[i].Duration = float32(seq.Duration) / 1000.0
-			mdl.Animations[i].TranslationTracks = make([]model.AnimationTrack[mgl32.Vec3], 0)
-			mdl.Animations[i].RotationTracks = make([]model.AnimationTrack[mgl32.Vec4], 0)
-			mdl.Animations[i].ScaleTracks = make([]model.AnimationTrack[mgl32.Vec3], 0)
+			animOrder[i].order = int(seq.ID)<<16 | int(seq.VariationIndex)
+			animOrder[i].animation.Name = GetAnimationName(seq.ID, seq.VariationIndex)
+			animOrder[i].animation.Duration = float32(seq.Duration) / 1000.0
+			animOrder[i].animation.TranslationTracks = make([]model.AnimationTrack[mgl32.Vec3], 0)
+			animOrder[i].animation.RotationTracks = make([]model.AnimationTrack[mgl32.Vec4], 0)
+			animOrder[i].animation.ScaleTracks = make([]model.AnimationTrack[mgl32.Vec3], 0)
 		}
 	}
 
@@ -98,8 +105,8 @@ func (skel M2Skeleton) FillModel(mdl *model.Model, casc *Casc) {
 		if err != nil {
 			continue
 		}
-		name := GetAnimationName(anim.AnimId, anim.SubAnimId)
-		i := slices.IndexFunc(mdl.Animations, func(a model.Animation) bool { return name == a.Name })
+		order := int(anim.AnimId)<<16 | int(anim.SubAnimId)
+		i := slices.IndexFunc(animOrder, func(a animationWithOrder) bool { return order == a.order })
 		animDataLookup[i] = M2AnimFromReader(animFile).BoneData()
 	}
 
@@ -131,7 +138,7 @@ func (skel M2Skeleton) FillModel(mdl *model.Model, casc *Casc) {
 				for trackIdx, v := range loadedBone.Translation.Values[animIdx] {
 					track.Values[trackIdx] = v.IntoYUp(true).IntoMGL32()
 				}
-				mdl.Animations[animIdx].TranslationTracks = append(mdl.Animations[animIdx].TranslationTracks, track)
+				animOrder[animIdx].animation.TranslationTracks = append(animOrder[animIdx].animation.TranslationTracks, track)
 			}
 
 			for animIdx, ts := range loadedBone.Rotation.Timestamps {
@@ -144,7 +151,7 @@ func (skel M2Skeleton) FillModel(mdl *model.Model, casc *Casc) {
 				for trackIdx, v := range loadedBone.Rotation.Values[animIdx] {
 					track.Values[trackIdx] = v.Decompress().IntoYUp(true).IntoMGL32().Normalize()
 				}
-				mdl.Animations[animIdx].RotationTracks = append(mdl.Animations[animIdx].RotationTracks, track)
+				animOrder[animIdx].animation.RotationTracks = append(animOrder[animIdx].animation.RotationTracks, track)
 			}
 
 			for animIdx, ts := range loadedBone.Scale.Timestamps {
@@ -157,9 +164,18 @@ func (skel M2Skeleton) FillModel(mdl *model.Model, casc *Casc) {
 				for trackIdx, v := range loadedBone.Scale.Values[animIdx] {
 					track.Values[trackIdx] = v.IntoYUp(false).IntoMGL32()
 				}
-				mdl.Animations[animIdx].ScaleTracks = append(mdl.Animations[animIdx].ScaleTracks, track)
+				animOrder[animIdx].animation.ScaleTracks = append(animOrder[animIdx].animation.ScaleTracks, track)
 			}
 		}
+	}
+
+	// sort the animations by their id
+	sort.Slice(animOrder, func(i, j int) bool {
+		return animOrder[i].order < animOrder[j].order
+	})
+	mdl.Animations = make([]model.Animation, len(skel.Sequences))
+	for i, order := range animOrder {
+		mdl.Animations[i] = order.animation
 	}
 }
 
