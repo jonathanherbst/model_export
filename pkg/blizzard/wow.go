@@ -217,7 +217,7 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 		if err != nil {
 			return nil
 		}
-		skel.FillModel(&mdl)
+		skel.FillModel(&mdl, wow.Casc)
 	}
 
 	wow.loadConfigurationOptions(&mdl, *modelRecord)

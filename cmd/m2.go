@@ -90,7 +90,7 @@ var m2Cmd = &cobra.Command{
 				return
 			}
 
-			fmt.Printf("M2 file has %d vertices, %d bones, %d sequences\n", len(m2.Vertices), len(m2.Bones), len(m2.Sequences))
+			fmt.Printf("M2 file has %d vertices, %d sequences\n", len(m2.Vertices), len(m2.Sequences))
 			fmt.Printf("Skin file ids: %v\n", m2.SkinFileIds)
 			fmt.Printf("Skel file ids: %v\n", m2.SkelFileIds)
 			fmt.Printf("Texture file ids: %v\n", m2.TextureFileIds)
@@ -125,14 +125,6 @@ var m2Cmd = &cobra.Command{
 				fmt.Printf("\tHas Seq 808: %d\n", first808Idx)
 				fmt.Printf("\tAnims: %v\n", skel.AnimMeta)
 				fmt.Printf("\tBoneFiles: %v\n", skel.BoneFileIds)
-				fmt.Println("Bones:")
-				for _, bone := range skel.Bones {
-					animLen := 0
-					if first808Idx != nil && len(bone.Rotation.Timestamps) > *first808Idx {
-						animLen = len(bone.Rotation.Timestamps[*first808Idx])
-					}
-					fmt.Printf("\tid: %d, 808 rot: %d\n", bone.KeyBoneId, animLen)
-				}
 			}
 		}
 	},
@@ -151,7 +143,7 @@ func exportGLTF(m2 *blizzard.M2, skin *blizzard.M2Skin, skel *blizzard.M2Skeleto
 	var mdl model.Model
 	m2.FillModel(&mdl, nil)
 	skin.FillModel(&mdl)
-	skel.FillModel(&mdl)
+	skel.FillModel(&mdl, nil)
 
 	// export the model
 	if err := model.ExportGLTF(mdl, gltf_path); err != nil {

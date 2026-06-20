@@ -6,6 +6,7 @@ import (
 	"io"
 	"jph/model-export/pkg/model"
 	"os"
+	"slices"
 
 	"github.com/go-gl/mathgl/mgl32"
 )
@@ -35,11 +36,8 @@ func M2SkelFromReader(r io.Reader) (*M2Skeleton, error) {
 			if _, err := binary.Decode(data, binary.LittleEndian, &header); err != nil {
 				return nil, fmt.Errorf("failed to decode SKB1: %w", err)
 			}
-			bones := header.Bones.Load(data, 0)
-			skel.Bones = make([]m2LoadedBone, len(bones))
-			for i, bone := range bones {
-				skel.Bones[i] = bone.Load(data, 0)
-			}
+			skel.Bones = header.Bones.Load(data, 0)
+			skel.boneData = data
 		case "SKS1":
 			var header m2SKS1Header
 			if _, err := binary.Decode(data, binary.LittleEndian, &header); err != nil {
@@ -73,7 +71,8 @@ func M2SkelFromReader(r io.Reader) (*M2Skeleton, error) {
 
 type M2Skeleton struct {
 	Name             string
-	Bones            []m2LoadedBone
+	boneData         []byte
+	Bones            []m2CompBone
 	Sequences        []M2Sequence
 	SequenceIds      []int16
 	ParentSkelFileId *uint32
@@ -81,7 +80,7 @@ type M2Skeleton struct {
 	BoneFileIds      []m2BFIDData
 }
 
-func (skel M2Skeleton) FillModel(mdl *model.Model) {
+func (skel M2Skeleton) FillModel(mdl *model.Model, casc *Casc) {
 	if len(skel.Sequences) > 0 {
 		mdl.Animations = make([]model.Animation, len(skel.Sequences))
 		for i, seq := range skel.Sequences {
@@ -93,6 +92,17 @@ func (skel M2Skeleton) FillModel(mdl *model.Model) {
 		}
 	}
 
+	animDataLookup := make(map[int][]byte)
+	for _, anim := range skel.AnimMeta {
+		animFile, err := casc.OpenFileById(anim.AnimFileId, false)
+		if err != nil {
+			continue
+		}
+		name := fmt.Sprintf("%d_%d", anim.AnimId, anim.SubAnimId)
+		i := slices.IndexFunc(mdl.Animations, func(a model.Animation) bool { return name == a.Name })
+		animDataLookup[i] = M2AnimFromReader(animFile).BoneData()
+	}
+
 	if len(skel.Bones) > 0 {
 		mdl.Skeleton = &model.Skeleton{
 			BoneNames:           make([]string, len(skel.Bones)),
@@ -100,7 +110,8 @@ func (skel M2Skeleton) FillModel(mdl *model.Model) {
 			BoneInvBindMatrices: make([]mgl32.Mat4, len(skel.Bones)),
 		}
 		for i, bone := range skel.Bones {
-			mdl.Skeleton.BoneNames[i] = fmt.Sprintf("bone_%s (%d, 0x%08x)", bone.GetName(), bone.KeyBoneId, bone.BoneNameCRC)
+			loadedBone := bone.Load(skel.boneData, 0, animDataLookup)
+			mdl.Skeleton.BoneNames[i] = fmt.Sprintf("bone_%s (%d, 0x%08x)", loadedBone.GetName(), bone.KeyBoneId, bone.BoneNameCRC)
 			mdl.Skeleton.BoneParents[i] = int(bone.ParentBone)
 			bonePivot := bone.Pivot.IntoYUp(true)
 			mdl.Skeleton.BoneInvBindMatrices[i] = mgl32.Mat4FromRows(
@@ -110,40 +121,40 @@ func (skel M2Skeleton) FillModel(mdl *model.Model) {
 				mgl32.Vec4{0.0, 0.0, 0.0, 1.0},
 			)
 
-			for animIdx, ts := range bone.Translation.Timestamps {
+			for animIdx, ts := range loadedBone.Translation.Timestamps {
 				track := model.AnimationTrack[mgl32.Vec3]{
 					Bone:          i,
-					Interpolation: bone.Translation.InterpolationType.IntoModel(),
+					Interpolation: loadedBone.Translation.InterpolationType.IntoModel(),
 					Timestamps:    normalizeTimesatmps(ts, skel.Sequences[animIdx].Duration),
 					Values:        make([]mgl32.Vec3, len(ts)),
 				}
-				for trackIdx, v := range bone.Translation.Values[animIdx] {
+				for trackIdx, v := range loadedBone.Translation.Values[animIdx] {
 					track.Values[trackIdx] = v.IntoYUp(true).IntoMGL32()
 				}
 				mdl.Animations[animIdx].TranslationTracks = append(mdl.Animations[animIdx].TranslationTracks, track)
 			}
 
-			for animIdx, ts := range bone.Rotation.Timestamps {
+			for animIdx, ts := range loadedBone.Rotation.Timestamps {
 				track := model.AnimationTrack[mgl32.Vec4]{
 					Bone:          i,
-					Interpolation: bone.Rotation.InterpolationType.IntoModel(),
+					Interpolation: loadedBone.Rotation.InterpolationType.IntoModel(),
 					Timestamps:    normalizeTimesatmps(ts, skel.Sequences[animIdx].Duration),
 					Values:        make([]mgl32.Vec4, len(ts)),
 				}
-				for trackIdx, v := range bone.Rotation.Values[animIdx] {
+				for trackIdx, v := range loadedBone.Rotation.Values[animIdx] {
 					track.Values[trackIdx] = v.Decompress().IntoYUp(true).IntoMGL32().Normalize()
 				}
 				mdl.Animations[animIdx].RotationTracks = append(mdl.Animations[animIdx].RotationTracks, track)
 			}
 
-			for animIdx, ts := range bone.Scale.Timestamps {
+			for animIdx, ts := range loadedBone.Scale.Timestamps {
 				track := model.AnimationTrack[mgl32.Vec3]{
 					Bone:          i,
-					Interpolation: bone.Scale.InterpolationType.IntoModel(),
+					Interpolation: loadedBone.Scale.InterpolationType.IntoModel(),
 					Timestamps:    normalizeTimesatmps(ts, skel.Sequences[animIdx].Duration),
 					Values:        make([]mgl32.Vec3, len(ts)),
 				}
-				for trackIdx, v := range bone.Scale.Values[animIdx] {
+				for trackIdx, v := range loadedBone.Scale.Values[animIdx] {
 					track.Values[trackIdx] = v.IntoYUp(false).IntoMGL32()
 				}
 				mdl.Animations[animIdx].ScaleTracks = append(mdl.Animations[animIdx].ScaleTracks, track)

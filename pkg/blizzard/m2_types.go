@@ -60,10 +60,10 @@ type m2CompBone struct {
 	Pivot       C3Vector
 }
 
-func (bone m2CompBone) Load(buf []byte, adj int) m2LoadedBone {
-	translation := bone.Translation.Load(buf, adj)
-	rotation := bone.Rotation.Load(buf, adj)
-	scale := bone.Scale.Load(buf, adj)
+func (bone m2CompBone) Load(buf []byte, adj int, override map[int][]byte) m2LoadedBone {
+	translation := bone.Translation.Load(buf, adj, override)
+	rotation := bone.Rotation.Load(buf, adj, override)
+	scale := bone.Scale.Load(buf, adj, override)
 
 	return m2LoadedBone{
 		bone.KeyBoneId,
@@ -135,14 +135,22 @@ type m2Track[T any] struct {
 	Values m2Array[m2Array[T]]
 }
 
-func (track m2Track[T]) Load(buf []byte, adj int) m2LoadedTrack[T] {
+func (track m2Track[T]) Load(buf []byte, adj int, override map[int][]byte) m2LoadedTrack[T] {
 	timestamps := make([][]uint32, track.Base.Timestamps.Size)
 	for i, ts := range track.Base.Timestamps.Load(buf, adj) {
-		timestamps[i] = ts.Load(buf, adj)
+		if overBuf, ok := override[i]; ok {
+			timestamps[i] = ts.Load(overBuf, 0)
+		} else {
+			timestamps[i] = ts.Load(buf, adj)
+		}
 	}
 	values := make([][]T, track.Values.Size)
 	for i, v := range track.Values.Load(buf, adj) {
-		values[i] = v.Load(buf, adj)
+		if overBuf, ok := override[i]; ok {
+			values[i] = v.Load(overBuf, 0)
+		} else {
+			values[i] = v.Load(buf, adj)
+		}
 	}
 
 	return m2LoadedTrack[T]{track.Base.InterpolationType, track.Base.GlobalSequence, timestamps, values}
@@ -254,6 +262,14 @@ type M2Sequence struct {
 	Bounds         M2Bounds // Bounding volume for this sequence
 	VariationNext  int16    // id of the following animation of this AnimationID, points to an Index or is -1 if none.
 	AliasNext      uint16   // id in the list of animations. Used to find actual animation if this sequence is an alias (flags & 0x40)
+}
+
+func (seq M2Sequence) IsLocal() bool {
+	return seq.Flags&0x20 != 0
+}
+
+func (seq M2Sequence) IsAlias() bool {
+	return seq.Flags&0x40 != 0
 }
 
 type M2Range struct {

@@ -23,6 +23,7 @@ dbd
 *.skin
 *.skel
 *.bone
+*.anim
 
 # go build artifacts
 model-export

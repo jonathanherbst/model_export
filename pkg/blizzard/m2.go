@@ -32,11 +32,6 @@ func M2FromReader(r io.Reader) (*M2, error) {
 				return nil, fmt.Errorf("Failed reading M2: %w", err)
 			}
 			m2.Vertices = md20.Verticies()
-			bones := md20.Bones()
-			m2.Bones = make([]m2LoadedBone, len(bones))
-			for i, bone := range bones {
-				m2.Bones[i] = bone.Load(data, 0)
-			}
 			m2.Sequences = md20.Sequences()
 			nSkins = int(md20.MD20Header.NumSkinProfiles)
 
@@ -70,7 +65,6 @@ func M2FromReader(r io.Reader) (*M2, error) {
 
 type M2 struct {
 	Vertices       []M2Vertex
-	Bones          []m2LoadedBone
 	Sequences      []M2Sequence
 	SkinFileIds    []uint32
 	SkelFileIds    []uint32
