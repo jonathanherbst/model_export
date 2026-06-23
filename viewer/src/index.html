@@ -12,14 +12,16 @@
         Open GLTF/GLB file
         <input id="fileInput" type="file" accept=".gltf,.glb" />
       </label>
-      <label id="animationLabel" hidden>
-        Animation
-        <select id="animationSelect"></select>
-      </label>
       <button id="materialsButton" type="button" disabled>Show Materials</button>
       <div id="errorMessage" role="alert"></div>
       <div id="loadingIndicator" aria-live="polite"></div>
     </div>
     <div id="viewer-container"></div>
+    <div id="animation-bar" hidden>
+      <select id="animationSelect"></select>
+      <button id="playPauseBtn" type="button" title="Play/Pause">⏸</button>
+      <input type="range" id="timelineSlider" min="0" max="0" value="0" step="0.01">
+      <span id="timeDisplay">0:00 / 0:00</span>
+    </div>
   </body>
 </html>

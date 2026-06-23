@@ -50,6 +50,97 @@ canvas {
   width: 220px;
 }
 
+#animation-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
+}
+
+#animation-bar[hidden] {
+  display: none;
+}
+
+#animation-bar select {
+  background: #2a2a2e;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  min-width: 140px;
+}
+
+#animation-bar select option {
+  background: #2a2a2e;
+  color: #fff;
+}
+
+#playPauseBtn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.15s;
+}
+
+#playPauseBtn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+#timelineSlider {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+#timelineSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #4a9eff;
+  border: none;
+  cursor: pointer;
+}
+
+#timelineSlider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #4a9eff;
+  border: none;
+  cursor: pointer;
+}
+
+#timeDisplay {
+  font-size: 12px;
+  color: #ccc;
+  min-width: 75px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 #ui-panel label {
   display: flex;
   flex-direction: column;

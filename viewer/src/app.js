@@ -40,11 +40,15 @@ directionalLight.position.set(5, 10, 7.5);
 scene.add(directionalLight);
 
 const animationSelect = document.getElementById('animationSelect');
-const animationLabel = document.getElementById('animationLabel');
+const animationBar = document.getElementById('animation-bar');
+const playPauseBtn = document.getElementById('playPauseBtn');
+const timelineSlider = document.getElementById('timelineSlider');
+const timeDisplay = document.getElementById('timeDisplay');
 const materialsButton = document.getElementById('materialsButton');
 
 const clock = new THREE.Clock();
 let currentModel = null;
+let isSeeking = false;
 let mixer = null;
 let activeAction = null;
 let currentAnimations = [];
@@ -71,6 +75,11 @@ function clearModel() {
     mixer = null;
     activeAction = null;
   }
+
+  animationBar.hidden = true;
+  playPauseBtn.textContent = '⏸';
+  timelineSlider.value = 0;
+  timeDisplay.textContent = '0:00 / 0:00';
 
   if (!currentModel) return;
 
@@ -140,15 +149,35 @@ function isSupportedExtension(url) {
   return low.endsWith('.glb') || low.endsWith('.gltf');
 }
 
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function updateTimeline() {
+  if (!mixer || !activeAction) {
+    timelineSlider.value = 0;
+    timeDisplay.textContent = '0:00 / 0:00';
+    return;
+  }
+  const clip = activeAction.getClip();
+  const duration = clip.duration;
+  const currentTime = activeAction.time;
+  timelineSlider.max = duration;
+  timelineSlider.value = currentTime;
+  timeDisplay.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+}
+
 function setAnimationOptions(animations) {
   animationSelect.innerHTML = '';
 
   if (!animations || animations.length === 0) {
-    animationLabel.hidden = true;
+    animationBar.hidden = true;
     return;
   }
 
-  animationLabel.hidden = false;
+  animationBar.hidden = false;
 
   animations.forEach((clip, index) => {
     const option = document.createElement('option');
@@ -158,6 +187,11 @@ function setAnimationOptions(animations) {
   });
 
   animationSelect.value = '0';
+
+  timelineSlider.max = animations[0].duration;
+  timelineSlider.value = 0;
+  playPauseBtn.textContent = '⏸';
+  updateTimeline();
 }
 
 async function loadModel(url) {
@@ -202,8 +236,10 @@ async function loadModel(url) {
       mixer = new THREE.AnimationMixer(model.scene);
       setAnimationOptions(model.animations);
 
-      activeAction = mixer.clipAction(currentAnimations[0]);
-      activeAction.reset().play();
+    activeAction = mixer.clipAction(currentAnimations[0]);
+    activeAction.reset().play();
+    timelineSlider.max = currentAnimations[0].duration;
+    updateTimeline();
     } else {
       currentAnimations = [];
       setAnimationOptions([]);
@@ -291,6 +327,32 @@ animationSelect.addEventListener('change', () => {
 
   activeAction = mixer.clipAction(clip);
   activeAction.reset().play();
+
+  timelineSlider.max = clip.duration;
+  timelineSlider.value = 0;
+  playPauseBtn.textContent = '⏸';
+  updateTimeline();
+});
+
+playPauseBtn.addEventListener('click', () => {
+  if (!activeAction) return;
+  activeAction.paused = !activeAction.paused;
+  playPauseBtn.textContent = activeAction.paused ? '▶' : '⏸';
+});
+
+timelineSlider.addEventListener('input', () => {
+  isSeeking = true;
+  if (activeAction) {
+    activeAction.paused = true;
+    activeAction.time = Number(timelineSlider.value);
+    if (mixer) mixer.update(0);
+  }
+  playPauseBtn.textContent = '▶';
+  updateTimeline();
+});
+
+timelineSlider.addEventListener('change', () => {
+  isSeeking = false;
 });
 
 window.addEventListener('resize', () => {
@@ -306,6 +368,10 @@ function animate() {
   const delta = clock.getDelta();
   if (mixer) {
     mixer.update(delta);
+  }
+
+  if (mixer && activeAction && !isSeeking) {
+    updateTimeline();
   }
 
   controls.update();
