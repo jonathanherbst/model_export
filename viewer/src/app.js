@@ -10,7 +10,7 @@ const loadingIndicator = document.getElementById('loadingIndicator');
 const fileInput = document.getElementById('fileInput');
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x20232a);
+scene.background = new THREE.Color(0x3a3f4a);
 
 const camera = new THREE.PerspectiveCamera(
   45,
@@ -32,12 +32,15 @@ controls.maxDistance = 10;
 controls.target.set(0, 0.8, 0);
 controls.update();
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
 directionalLight.position.set(5, 10, 7.5);
 scene.add(directionalLight);
+
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+scene.add(hemiLight);
 
 const animationSelect = document.getElementById('animationSelect');
 const animationBar = document.getElementById('animation-bar');
