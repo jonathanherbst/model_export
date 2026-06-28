@@ -35,11 +35,11 @@ func BLPFromReader(r io.ReadSeekCloser) (*BLP, error) {
 		r.Close()
 		return nil, ErrInvalidFormat
 	}
-	return &BLP{header: h, reader: r}, nil
+	return &BLP{Header: h, reader: r}, nil
 }
 
 type BLP struct {
-	header blpHeader
+	Header blpHeader
 	reader io.ReadSeekCloser
 }
 
@@ -53,7 +53,7 @@ func (blp BLP) Decode(level int) (image.Image, error) {
 		return nil, ErrInvalidImageFormat
 	}
 
-	switch blp.header.ColorEncoding {
+	switch blp.Header.ColorEncoding {
 	case BLPColorDXT:
 		return blp.decodeDXT(data)
 	default:
@@ -62,8 +62,8 @@ func (blp BLP) Decode(level int) (image.Image, error) {
 }
 
 func (blp BLP) getMipmap(level int) ([]byte, error) {
-	offset := blp.header.MipOffsets[level]
-	size := blp.header.MipSizes[level]
+	offset := blp.Header.MipOffsets[level]
+	size := blp.Header.MipSizes[level]
 	_, err := blp.reader.Seek(int64(offset), io.SeekStart)
 	if err != nil {
 		return nil, err
@@ -80,13 +80,13 @@ func (blp BLP) getMipmap(level int) ([]byte, error) {
 func (blp BLP) decodeDXT(data []byte) (image.Image, error) {
 	var decoder *dxt.Decoder
 	var err error
-	switch blp.header.AlphaType {
+	switch blp.Header.AlphaType {
 	case BLPAlphaNone:
-		decoder, err = dxt.New("DXT1", int(blp.header.Width), int(blp.header.Height))
+		decoder, err = dxt.New("DXT1", int(blp.Header.Width), int(blp.Header.Height))
 	case BLPAlphaDXT3:
-		decoder, err = dxt.New("DXT3", int(blp.header.Width), int(blp.header.Height))
+		decoder, err = dxt.New("DXT3", int(blp.Header.Width), int(blp.Header.Height))
 	case BLPAlphaDXT5:
-		decoder, err = dxt.New("DXT5", int(blp.header.Width), int(blp.header.Height))
+		decoder, err = dxt.New("DXT5", int(blp.Header.Width), int(blp.Header.Height))
 	default:
 		return nil, ErrInvalidImageFormat
 	}

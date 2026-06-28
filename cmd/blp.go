@@ -27,6 +27,8 @@ var blpCmd = &cobra.Command{
 			os.Exit(2)
 		}
 
+		fmt.Printf("%v\n", blp.Header)
+
 		if png_path != "" {
 			f, err := os.Create(png_path)
 			if err == nil {

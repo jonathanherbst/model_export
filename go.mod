@@ -9,7 +9,6 @@ require (
 	github.com/qmuntal/gltf v0.28.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/image v0.40.0
-	gonum.org/v1/gonum v0.17.0
 )
 
 require (

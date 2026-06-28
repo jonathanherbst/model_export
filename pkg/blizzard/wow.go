@@ -358,6 +358,9 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 		return textureLayers[i].GetIntFieldByName("Layer") < textureLayers[j].GetIntFieldByName("Layer")
 	})
 
+	var underwearChoiceIdx *int = nil
+	var braChoiceIdx *int = nil
+
 	// setup all the material segments
 	layerMapping := make(map[int64][]int)
 	for _, textureLayer := range textureLayers {
@@ -393,6 +396,30 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 					})
 				}
 			}
+		}
+		if textureTargetId == 13 {
+			// underwear slot 0 (underwear)
+			underwearChoiceIdx = new(len(mdl.Choices))
+			mdl.Choices = append(mdl.Choices, model.ConfigChoice{
+				Option: "Underwear",
+				Choice: "On",
+			})
+			mdl.Choices = append(mdl.Choices, model.ConfigChoice{
+				Option: "Underwear",
+				Choice: "Off",
+			})
+		}
+		if textureTargetId == 14 {
+			// underwear slot 1 (bra)
+			braChoiceIdx = new(len(mdl.Choices))
+			mdl.Choices = append(mdl.Choices, model.ConfigChoice{
+				Option: "Bra",
+				Choice: "On",
+			})
+			mdl.Choices = append(mdl.Choices, model.ConfigChoice{
+				Option: "Bra",
+				Choice: "Off",
+			})
 		}
 	}
 
@@ -435,6 +462,14 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 			material := custMaterialCache.GetFixedRecordById(materialId)
 			if material != nil {
 				textureTargetId := material.GetIntFieldByName("ChrModelTextureTargetID")
+				if textureTargetId == 13 && underwearChoiceIdx != nil {
+					// underwear slot 0 (underwear)
+					component.ChoiceIdxes = []int{*underwearChoiceIdx}
+				}
+				if textureTargetId == 14 && braChoiceIdx != nil {
+					// underwear slot 1 (bra)
+					component.ChoiceIdxes = []int{*braChoiceIdx}
+				}
 				if matInfo, ok := layerMapping[textureTargetId]; ok {
 					textureSegment := model.ConfigMaterial{
 						MaterialIdx: matInfo[0],

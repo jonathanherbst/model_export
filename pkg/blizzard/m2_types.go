@@ -301,6 +301,7 @@ type M2Texture struct {
 }
 
 type M2TextureWeight struct {
+	weight m2Track[uint16]
 	// Placeholder
 }
 
