@@ -17,6 +17,7 @@ type Model struct {
 	VertexTexCoords_1 []mgl32.Vec2
 	Skin              *Skin
 	Skeleton          *Skeleton
+	BoundingBox       *[2]mgl32.Vec3
 	Animations        []Animation
 	Choices           []ConfigChoice
 	Elements          []ConfigElement

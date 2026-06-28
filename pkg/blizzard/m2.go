@@ -43,6 +43,7 @@ func M2FromReader(r io.Reader) (*M2, error) {
 				m2.Textures[i] = textures[ti]
 			}
 			m2.Materials = md20.MD20Header.Materials.Load(data, 0)
+			m2.BoundingBox = md20.MD20Header.BoundingBox
 		case "SFID":
 			m2.SkinFileIds = make([]uint32, nSkins)
 			binary.Decode(data, binary.LittleEndian, m2.SkinFileIds)
@@ -71,6 +72,7 @@ type M2 struct {
 	TextureFileIds []uint32
 	Textures       []M2Texture
 	Materials      []M2Material
+	BoundingBox    CAaBox
 	textureLookup  []uint16
 }
 
@@ -91,6 +93,10 @@ func (m2 M2) FillModel(mdl *model.Model, casc *Casc) {
 			mdl.VertexTexCoords_0[i] = v.TexCoords[0].IntoMGL32()
 			mdl.VertexTexCoords_1[i] = v.TexCoords[1].IntoMGL32()
 		}
+	}
+	mdl.BoundingBox = &[2]mgl32.Vec3{
+		m2.BoundingBox.Min.IntoYUp(true).IntoMGL32(),
+		m2.BoundingBox.Max.IntoYUp(true).IntoMGL32(),
 	}
 
 	if casc != nil {

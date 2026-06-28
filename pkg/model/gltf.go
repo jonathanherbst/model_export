@@ -19,8 +19,17 @@ func ExportGLTF(mdl Model, path string) error {
 	}
 	doc.Nodes = []*gltf.Node{&modelNode}
 	doc.Scenes = []*gltf.Scene{{
-		Nodes: []int{0},
+		Nodes:  []int{0},
+		Extras: make(map[string]interface{}),
 	}}
+	if extras, ok := doc.Scenes[0].Extras.(map[string]interface{}); ok && mdl.BoundingBox != nil {
+		extras["MDLE_BoundingBox"] = map[string]interface{}{
+			"min": []float64{float64(mdl.BoundingBox[0].X()), float64(mdl.BoundingBox[0].Y()), float64(mdl.BoundingBox[0].Z())},
+			"max": []float64{float64(mdl.BoundingBox[1].X()), float64(mdl.BoundingBox[1].Y()), float64(mdl.BoundingBox[1].Z())},
+		}
+		doc.Scenes[0].Extras = extras
+	}
+
 	doc.Scene = new(0)
 	var skinIdx *int = nil
 
