@@ -446,8 +446,6 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 						})
 						component.ChoiceIdxes = []int{choiceIdx}
 						underwearOptions[materialId] = choiceIdx
-					} else {
-						continue
 					}
 				}
 				if textureTargetId == 14 {
@@ -459,8 +457,6 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 						})
 						component.ChoiceIdxes = []int{choiceIdx}
 						braOptions[materialId] = choiceIdx
-					} else {
-						continue
 					}
 				}
 				if matInfo, ok := layerMapping[textureTargetId]; ok {
