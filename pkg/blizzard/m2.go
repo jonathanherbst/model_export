@@ -94,10 +94,11 @@ func (m2 M2) FillModel(mdl *model.Model, casc *Casc) {
 			mdl.VertexTexCoords_1[i] = v.TexCoords[1].IntoMGL32()
 		}
 	}
-	mdl.BoundingBox = &[2]mgl32.Vec3{
-		m2.BoundingBox.Min.IntoYUp(true).IntoMGL32(),
-		m2.BoundingBox.Max.IntoYUp(true).IntoMGL32(),
-	}
+	// ignore the bounding box, it's bullshit
+	// mdl.BoundingBox = &[2]mgl32.Vec3{
+	// 	m2.BoundingBox.Min.IntoYUp(true).IntoMGL32(),
+	// 	m2.BoundingBox.Max.IntoYUp(true).IntoMGL32(),
+	// }
 
 	if casc != nil {
 		for _, texFileId := range m2.TextureFileIds {

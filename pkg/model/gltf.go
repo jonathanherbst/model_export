@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/go-gl/mathgl/mgl64"
 	"github.com/qmuntal/gltf"
 	"github.com/qmuntal/gltf/modeler"
 )
@@ -286,6 +287,29 @@ func ExportGLTF(mdl Model, path string) error {
 			StaticMeshes: static_meshes,
 		},
 	}
+
+	doc.Cameras = []*gltf.Camera{
+		&gltf.Camera{
+			Perspective: &gltf.Perspective{
+				Yfov:  70,
+				Znear: 0.01,
+				Zfar:  new(2000.0),
+			},
+		},
+	}
+
+	// from wow.export perspective camera configuration for character
+	pos := mgl64.Vec3{0, 1.609, 2.347}
+	tar := mgl64.Vec3{0, 1.247, 0.537}
+	up := mgl64.Vec3{0, 1, 0}
+	rot := mgl64.QuatLookAtV(pos, tar, up)
+	cameraNodeIdx := len(doc.Nodes)
+	doc.Nodes = append(doc.Nodes, &gltf.Node{
+		Camera:      new(0),
+		Translation: [3]float64{pos.X(), pos.Y(), pos.Z()},
+		Rotation:    [4]float64{rot.X(), rot.Y(), rot.Z(), rot.W},
+	})
+	doc.Scenes[0].Nodes = append(doc.Scenes[0].Nodes, cameraNodeIdx)
 
 	return gltf.SaveBinary(doc, path)
 }

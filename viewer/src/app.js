@@ -144,6 +144,42 @@ function focusModel(object) {
   controls.update();
 }
 
+function findFirstCamera(root) {
+  let found = null;
+  root.traverse(child => { if (!found && child.isCamera) found = child });
+  return found;
+}
+
+function useGltfCamera(gltfCam, object) {
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  gltfCam.getWorldPosition(pos);
+  gltfCam.getWorldQuaternion(quat);
+
+  camera.position.copy(pos);
+  camera.quaternion.copy(quat);
+
+  if (gltfCam.isPerspectiveCamera) {
+    camera.fov  = gltfCam.fov;
+    camera.near = gltfCam.near;
+    camera.far  = gltfCam.far;
+    camera.updateProjectionMatrix();
+  }
+
+  const box = new THREE.Box3().setFromObject(object);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  controls.minDistance = maxDim * 0.05;
+  controls.maxDistance = maxDim * 10;
+
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(quat).normalize();
+  const t = new THREE.Vector3().copy(center).sub(pos).dot(dir);
+  controls.target.copy(pos).add(dir.clone().multiplyScalar(Math.max(t, 1)));
+
+  controls.update();
+}
+
 function isSupportedExtension(url) {
   const low = url.toLowerCase();
   if (low.startsWith('blob:') || low.startsWith('data:')) {
@@ -271,7 +307,12 @@ async function loadModel(url) {
     materialsPanel = setupMaterialsPanel(model, {});
     materialsButton.disabled = false;
 
-    focusModel(model.scene);
+    const gltfCam = findFirstCamera(model.scene);
+    if (gltfCam) {
+      useGltfCamera(gltfCam, model.scene);
+    } else {
+      focusModel(model.scene);
+    }
     showLoading('');
   } catch (error) {
     showError(`Failed to load model: ${error.message || error}`);
