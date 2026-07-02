@@ -39,6 +39,64 @@ canvas {
   max-width: 300px;
 }
 
+#ui-panel.collapsed {
+  display: none;
+}
+
+#closePanelBtn {
+  align-self: flex-end;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+}
+
+#closePanelBtn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+#openPanelBtn {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 100;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(3px);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+#openPanelBtn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+#openPanelBtn.collapsed {
+  display: none;
+}
+
 #ui-panel > :not(#config-panel) {
   display: flex;
   gap: 8px;

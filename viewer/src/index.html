@@ -8,6 +8,7 @@
   </head>
   <body>
     <div id="ui-panel">
+      <button id="closePanelBtn" type="button" title="Close panel">×</button>
       <label>
         Open GLTF/GLB file
         <input id="fileInput" type="file" accept=".gltf,.glb" />
@@ -16,6 +17,7 @@
       <div id="errorMessage" role="alert"></div>
       <div id="loadingIndicator" aria-live="polite"></div>
     </div>
+    <button id="openPanelBtn" type="button" title="Open panel" class="collapsed">☰</button>
     <div id="viewer-container"></div>
     <div id="animation-bar" hidden>
       <select id="animationSelect"></select>

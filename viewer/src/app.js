@@ -48,6 +48,9 @@ const playPauseBtn = document.getElementById('playPauseBtn');
 const timelineSlider = document.getElementById('timelineSlider');
 const timeDisplay = document.getElementById('timeDisplay');
 const materialsButton = document.getElementById('materialsButton');
+const closePanelBtn = document.getElementById('closePanelBtn');
+const openPanelBtn = document.getElementById('openPanelBtn');
+const uiPanel = document.getElementById('ui-panel');
 
 const clock = new THREE.Clock();
 let currentModel = null;
@@ -349,6 +352,16 @@ materialsButton.addEventListener('click', () => {
   if (materialsPanel) {
     materialsPanel.open();
   }
+});
+
+closePanelBtn.addEventListener('click', () => {
+  uiPanel.classList.add('collapsed');
+  openPanelBtn.classList.remove('collapsed');
+});
+
+openPanelBtn.addEventListener('click', () => {
+  uiPanel.classList.remove('collapsed');
+  openPanelBtn.classList.add('collapsed');
 });
 
 animationSelect.addEventListener('change', () => {
