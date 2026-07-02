@@ -135,8 +135,8 @@ type WrappingMode gltf.WrappingMode
 
 const (
 	WrapRepeat         WrappingMode = WrappingMode(gltf.WrapRepeat)
-	WrapClampToEdge                 = gltf.WrapClampToEdge
-	WrapMirroredRepeat              = gltf.WrapMirroredRepeat
+	WrapClampToEdge                 = WrappingMode(gltf.WrapClampToEdge)
+	WrapMirroredRepeat              = WrappingMode(gltf.WrapMirroredRepeat)
 )
 
 type AlphaMode gltf.AlphaMode

@@ -178,6 +178,7 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 	m2File.FillModel(&mdl, wow.Casc)
 
 	m2Materials := make(map[string]M2Material)
+	m2Textures := make(map[string]M2Texture)
 	if len(m2File.SkinFileIds) > 0 {
 		skinFile, err := wow.Casc.OpenFileById(uint32(m2File.SkinFileIds[0]), false)
 		if err != nil {
@@ -205,6 +206,7 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 				continue
 			}
 			m2Materials[mdl.Skin.Meshes[batch.SkinSectionIndex].MaterialName] = m2File.Materials[batch.MaterialIndex]
+			m2Textures[mdl.Skin.Meshes[batch.SkinSectionIndex].MaterialName] = m2File.Textures[batch.TextureComboIndex]
 		}
 	}
 
@@ -240,6 +242,18 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 				mdl.Materials[i].AlphaMode = model.AlphaMask
 			default:
 				mdl.Materials[i].AlphaMode = model.AlphaBlend
+			}
+		}
+		if m2Texture, ok := m2Textures[mat.Name]; ok {
+			if m2Texture.Flags&0x01 == 0 {
+				mdl.Materials[i].HorizontalWrap = model.WrapClampToEdge
+			} else {
+				mdl.Materials[i].HorizontalWrap = model.WrapRepeat
+			}
+			if m2Texture.Flags&0x02 == 0 {
+				mdl.Materials[i].VerticalWrap = model.WrapClampToEdge
+			} else {
+				mdl.Materials[i].HorizontalWrap = model.WrapRepeat
 			}
 		}
 	}
@@ -446,6 +460,8 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 						})
 						component.ChoiceIdxes = []int{choiceIdx}
 						underwearOptions[materialId] = choiceIdx
+					} else {
+						continue
 					}
 				}
 				if textureTargetId == 14 {
@@ -457,6 +473,8 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 						})
 						component.ChoiceIdxes = []int{choiceIdx}
 						braOptions[materialId] = choiceIdx
+					} else {
+						continue
 					}
 				}
 				if matInfo, ok := layerMapping[textureTargetId]; ok {
