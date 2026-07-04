@@ -253,7 +253,7 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 			if m2Texture.Flags&0x02 == 0 {
 				mdl.Materials[i].VerticalWrap = model.WrapClampToEdge
 			} else {
-				mdl.Materials[i].HorizontalWrap = model.WrapRepeat
+				mdl.Materials[i].VerticalWrap = model.WrapRepeat
 			}
 		}
 	}
