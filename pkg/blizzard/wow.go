@@ -288,10 +288,6 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 }
 
 func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRecord) {
-	disabledTextureTargets := []int64{
-		36, // EYE_GLOW_FACE_OVERLAY (Makes Night Elf Eyes look weird)
-	}
-
 	custOptionTable, err := wow.GetTable("ChrCustomizationOption")
 	if err != nil {
 		panic("no ChrCustomizationOption table")
@@ -411,9 +407,6 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 			material := mdl.Materials[materialIdx].SegmentedTexture
 
 			textureTargetId := GetSliceFieldByName[int64](textureLayer, "ChrModelTextureTargetID")[0]
-			if slices.Index(disabledTextureTargets, textureTargetId) != -1 {
-				continue
-			}
 			layerMapping[textureTargetId] = []int{materialIdx, len(material.Segments)}
 
 			combiner := wow.loadBlendMode(mdl, textureLayer)
