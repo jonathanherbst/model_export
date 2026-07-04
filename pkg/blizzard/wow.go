@@ -371,16 +371,20 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 	for modelMaterial := range chrModelMaterialTable.GetFixedRecordsByForeignKey(layoutId) {
 		modelMaterials = append(modelMaterials, modelMaterial)
 		textureType := modelMaterial.GetIntFieldByName("TextureType")
-		mdl.Materials = append(mdl.Materials, model.Material{
-			Name: GetTextureNameFromType(uint32(textureType)),
-			SegmentedTexture: &model.SegmentedTexture{
-				Width:    uint(modelMaterial.GetIntFieldByName("Width")),
-				Height:   uint(modelMaterial.GetIntFieldByName("Height")),
-				Segments: make([]model.TextureSegment, 0),
-			},
-			HorizontalWrap: model.WrapRepeat,
-			VerticalWrap:   model.WrapRepeat,
-		})
+		name := GetTextureNameFromType(uint32(textureType))
+		// make sure a mesh actually uses this material before putting it in the model
+		if 0 <= slices.IndexFunc(mdl.Skin.Meshes, func(mesh model.Mesh) bool { return mesh.MaterialName == name }) {
+			mdl.Materials = append(mdl.Materials, model.Material{
+				Name: GetTextureNameFromType(uint32(textureType)),
+				SegmentedTexture: &model.SegmentedTexture{
+					Width:    uint(modelMaterial.GetIntFieldByName("Width")),
+					Height:   uint(modelMaterial.GetIntFieldByName("Height")),
+					Segments: make([]model.TextureSegment, 0),
+				},
+				HorizontalWrap: model.WrapRepeat,
+				VerticalWrap:   model.WrapRepeat,
+			})
+		}
 	}
 
 	// cache all the texture sections for the layout
@@ -403,36 +407,38 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 	for _, textureLayer := range textureLayers {
 		materialName := GetTextureNameFromType(uint32(textureLayer.GetIntFieldByName("TextureType")))
 		materialIdx := slices.IndexFunc(mdl.Materials, func(mat model.Material) bool { return mat.Name == materialName })
-		material := mdl.Materials[materialIdx].SegmentedTexture
+		if materialIdx >= 0 {
+			material := mdl.Materials[materialIdx].SegmentedTexture
 
-		textureTargetId := GetSliceFieldByName[int64](textureLayer, "ChrModelTextureTargetID")[0]
-		if slices.Index(disabledTextureTargets, textureTargetId) != -1 {
-			continue
-		}
-		layerMapping[textureTargetId] = []int{materialIdx, len(material.Segments)}
+			textureTargetId := GetSliceFieldByName[int64](textureLayer, "ChrModelTextureTargetID")[0]
+			if slices.Index(disabledTextureTargets, textureTargetId) != -1 {
+				continue
+			}
+			layerMapping[textureTargetId] = []int{materialIdx, len(material.Segments)}
 
-		combiner := wow.loadBlendMode(mdl, textureLayer)
+			combiner := wow.loadBlendMode(mdl, textureLayer)
 
-		sectionTypeBitmask := textureLayer.GetIntFieldByName("TextureSectionTypeBitMask")
-		if sectionTypeBitmask == -1 {
-			material.Segments = append(material.Segments, model.TextureSegment{
-				X:        0,
-				Y:        0,
-				Width:    material.Width,
-				Height:   material.Height,
-				Combiner: combiner, // set them all to overlay for now
-			})
-		} else {
-			for _, section := range textureSections {
-				sectionType := section.GetIntFieldByName("SectionType")
-				if (1<<sectionType)&sectionTypeBitmask != 0 {
-					material.Segments = append(material.Segments, model.TextureSegment{
-						X:        uint(section.GetIntFieldByName("X")),
-						Y:        uint(section.GetIntFieldByName("Y")),
-						Width:    uint(section.GetIntFieldByName("Width")),
-						Height:   uint(section.GetIntFieldByName("Height")),
-						Combiner: combiner, // set them all to overlay for now
-					})
+			sectionTypeBitmask := textureLayer.GetIntFieldByName("TextureSectionTypeBitMask")
+			if sectionTypeBitmask == -1 {
+				material.Segments = append(material.Segments, model.TextureSegment{
+					X:        0,
+					Y:        0,
+					Width:    material.Width,
+					Height:   material.Height,
+					Combiner: combiner, // set them all to overlay for now
+				})
+			} else {
+				for _, section := range textureSections {
+					sectionType := section.GetIntFieldByName("SectionType")
+					if (1<<sectionType)&sectionTypeBitmask != 0 {
+						material.Segments = append(material.Segments, model.TextureSegment{
+							X:        uint(section.GetIntFieldByName("X")),
+							Y:        uint(section.GetIntFieldByName("Y")),
+							Width:    uint(section.GetIntFieldByName("Width")),
+							Height:   uint(section.GetIntFieldByName("Height")),
+							Combiner: combiner, // set them all to overlay for now
+						})
+					}
 				}
 			}
 		}
@@ -535,7 +541,11 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 					component.Materials = append(component.Materials, textureSegment)
 				}
 			}
-			mdl.Elements = append(mdl.Elements, component)
+
+			// only include the element if it does things
+			if len(component.Materials) > 0 || len(component.MeshIdxes) > 0 {
+				mdl.Elements = append(mdl.Elements, component)
+			}
 		}
 	}
 
