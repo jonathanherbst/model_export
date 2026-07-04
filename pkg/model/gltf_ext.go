@@ -3,11 +3,11 @@ package model
 const SEGMENTED_TEXTURE_NAME string = "MDLE_SegmentedTexture"
 
 type TextureSegment struct {
-	X         uint   `json:"x"`
-	Y         uint   `json:"y"`
-	Width     uint   `json:"width"`
-	Height    uint   `json:"height"`
-	BlendMode string `json:"blend_mode"`
+	X        uint   `json:"x"`
+	Y        uint   `json:"y"`
+	Width    uint   `json:"width"`
+	Height   uint   `json:"height"`
+	Combiner string `json:"combiner"`
 }
 
 type SegmentedTexture struct {
@@ -16,12 +16,14 @@ type SegmentedTexture struct {
 	Segments []TextureSegment `json:"segments"`
 }
 
-const CONFIGURATION_NAME string = "MDLE_Configuration"
+const SCENE_NAME string = "MDLE_Scene"
 
-type ConfigExtension struct {
-	Choices      []ConfigChoice  `json:"choices"`
-	Elements     []ConfigElement `json:"elements"`
-	StaticMeshes []int           `json:"static_meshes"`
+type SceneExtension struct {
+	Choices      []ConfigChoice      `json:"choices"`
+	Elements     []ConfigElement     `json:"elements"`
+	StaticMeshes []int               `json:"static_meshes"`
+	Shaders      map[string]string   `json:"shaders"`
+	Combiners    map[string]Combiner `json:"combiners"`
 }
 
 type ConfigChoice struct {
@@ -40,4 +42,9 @@ type ConfigElement struct {
 	ChoiceIdxes []int            `json:"choices"`
 	Materials   []ConfigMaterial `json:"materials"`
 	MeshIdxes   []int            `json:"meshes"`
+}
+
+type Combiner struct {
+	Vertex   string `json:"vertex"`
+	Fragment string `json:"fragment"`
 }

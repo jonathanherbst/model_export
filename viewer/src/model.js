@@ -49,13 +49,17 @@ export class Model {
     /** @type {Set<number>} */
     #static_meshes;
 
+    /** @type {*} */
+    #combiners;
+
     /**
      * @param {GLTF} gltf 
      */
     constructor(gltf) {
         this.#gltf = new ModelExportGLTF(gltf)
+        this.#combiners = this.#gltf.load_combiners()
         this.configurations = this.#gltf.load_config()
-        this.#segmented_textures = this.#gltf.load_segmented_textures()
+        this.#segmented_textures = this.#gltf.load_segmented_textures(this.#combiners)
         this.#config_elements = this.#gltf.load_config_elements()
 
         this.#config_meshes = new Set()
@@ -173,9 +177,15 @@ class ModelExportGLTF {
     /**
      * @returns {Map<string, {{id: number, name: string, color: number}}>}
      */
+    load_combiners() {
+        const sceneExt = this.gltf.userData.gltfExtensions?.MDLE_Scene
+        if(!sceneExt?.combiners || !sceneExt?.shaders) return null
+        return { shaders: sceneExt.shaders, combiners: sceneExt.combiners }
+    }
+
     load_config() {
         let configurations = new Map();
-        const ext_configs = this.gltf.userData.gltfExtensions?.MDLE_Configuration
+        const ext_configs = this.gltf.userData.gltfExtensions?.MDLE_Scene
         if(ext_configs) {
             for(let i = 0; i < ext_configs.choices.length; ++i) {
                 let choice = ext_configs.choices[i]
@@ -197,7 +207,7 @@ class ModelExportGLTF {
     
     load_config_elements() {
         let elements = new Array()
-        const ext_configs = this.gltf.userData.gltfExtensions?.MDLE_Configuration
+        const ext_configs = this.gltf.userData.gltfExtensions?.MDLE_Scene
         if(ext_configs) {
             for(let element of ext_configs.elements) {
                 const meshes = element.meshes.map((mesh_idx) => {
@@ -220,12 +230,12 @@ class ModelExportGLTF {
     /**
      * @returns {Map<number, SegmentedTexture>}
      */
-    load_segmented_textures() {
+    load_segmented_textures(combiners) {
         let textures = new Map()
         this.gltf.parser.json.materials.forEach((mat, i) => {
             if(mat.extensions?.MDLE_SegmentedTexture && this.material_map.has(i)) {
                 let three_mats = this.material_map.get(i)
-                const texture = new SegmentedTexture(three_mats[0])
+                const texture = new SegmentedTexture(three_mats[0], combiners)
                 for(let mat of three_mats) {
                     mat.map = texture.texture
                 }
@@ -240,7 +250,7 @@ class ModelExportGLTF {
      * @returns {Set<number>}
      */
     load_static_meshes() {
-        const ext_configs = this.gltf.userData.gltfExtensions?.MDLE_Configuration
+        const ext_configs = this.gltf.userData.gltfExtensions?.MDLE_Scene
         if(ext_configs) {
             return new Set(ext_configs.static_meshes)
         }
@@ -257,15 +267,6 @@ class ModelExportGLTF {
     }
 }
 
-/**
- * @typedef {Object} TextureSegment
- * @property {number} x
- * @property {number} y
- * @property {number} width
- * @property {number} height
- * @property {string} overlay
- */
-
 class SegmentedTexture {
     /** @type {string} */
     name;
@@ -279,19 +280,54 @@ class SegmentedTexture {
     /** @type {TextureSegment[]} */
     #segments;
 
+    /** @type {WebGL2RenderingContext|null} */
+    #gl;
+
+    /** @type {{shaders: object, combiners: object}|null} */
+    #shaderData;
+
+    /** @type {Map<string, WebGLProgram>|null} */
+    #programs;
+
+    /** @type {Map<WebGLProgram, object>} */
+    #uniforms;
+
+    /** @type {WebGLFramebuffer|null} */
+    #fbo0;
+
+    /** @type {WebGLFramebuffer|null} */
+    #fbo1;
+
+    /** @type {WebGLTexture|null} */
+    #tex0;
+
+    /** @type {WebGLTexture|null} */
+    #tex1;
+
+    /** @type {WebGLVertexArrayObject|null} */
+    #vao;
+
+    /** @type {Map<number, {texture: WebGLTexture, image: ImageBitmap}>} */
+    #segmentTexCache;
+
     get canvas() {
         return this.#canvas
     }
 
     /**
-     * @param {THREE.Material} material 
+     * @param {THREE.Material} material
+     * @param {{shaders: object, combiners: object}|null} shaderData
      */
-    constructor(material) {
+    constructor(material, shaderData) {
         this.name = material.name
-        this.#segments = material.userData.gltfExtensions.MDLE_SegmentedTexture.segments
+        const segTex = material.userData.gltfExtensions.MDLE_SegmentedTexture
+        this.#segments = segTex.segments
         this.#canvas = document.createElement("canvas")
-        this.#canvas.height = material.userData.gltfExtensions.MDLE_SegmentedTexture.height
-        this.#canvas.width = material.userData.gltfExtensions.MDLE_SegmentedTexture.width
+        this.#canvas.height = segTex.height
+        this.#canvas.width = segTex.width
+        this.#shaderData = shaderData
+        this.#programs = null
+        this.#segmentTexCache = new Map()
 
         this.texture = new THREE.CanvasTexture(this.#canvas)
         const srcMap = material.map
@@ -309,20 +345,215 @@ class SegmentedTexture {
         this.texture.repeat = srcMap.repeat
         this.texture.rotation = srcMap.rotation
         this.texture.needsUpdate = true
+
+        this.#initWebGL()
+    }
+
+    #initWebGL() {
+        if(!this.#shaderData) return
+
+        const gl = this.#canvas.getContext("webgl2", { antialias: false })
+        if(!gl) return
+        this.#gl = gl
+
+        const shaderData = this.#shaderData
+
+        // compile programs
+        this.#programs = new Map()
+        for(const [name, combiner] of Object.entries(shaderData.combiners)) {
+            const vsSrc = shaderData.shaders[combiner.vertex]
+            const fsSrc = shaderData.shaders[combiner.fragment]
+            if(!vsSrc || !fsSrc) {
+                console.warn(`missing shader for combiner: ${name}`)
+                continue
+            }
+
+            const vs = gl.createShader(gl.VERTEX_SHADER)
+            gl.shaderSource(vs, vsSrc)
+            gl.compileShader(vs)
+            if(!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
+                console.error(`vertex shader compile error (${name}):`, gl.getShaderInfoLog(vs))
+                gl.deleteShader(vs)
+                continue
+            }
+
+            const fs = gl.createShader(gl.FRAGMENT_SHADER)
+            gl.shaderSource(fs, fsSrc)
+            gl.compileShader(fs)
+            if(!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+                console.error(`fragment shader compile error (${name}):`, gl.getShaderInfoLog(fs))
+                gl.deleteShader(vs)
+                gl.deleteShader(fs)
+                continue
+            }
+
+            const program = gl.createProgram()
+            gl.attachShader(program, vs)
+            gl.attachShader(program, fs)
+            gl.linkProgram(program)
+            if(!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                console.error(`program link error (${name}):`, gl.getProgramInfoLog(program))
+                gl.deleteProgram(program)
+                gl.deleteShader(vs)
+                gl.deleteShader(fs)
+                continue
+            }
+
+            gl.deleteShader(vs)
+            gl.deleteShader(fs)
+            this.#programs.set(name, program)
+        }
+
+        // cache uniform locations for each program
+        this.#uniforms = new Map()
+        for(const [name, program] of this.#programs) {
+            this.#uniforms.set(program, {
+                uBase: gl.getUniformLocation(program, "uBase"),
+                uOverlay: gl.getUniformLocation(program, "uOverlay"),
+                uCanvasSize: gl.getUniformLocation(program, "uCanvasSize"),
+                uSegmentPos: gl.getUniformLocation(program, "uSegmentPos"),
+                uSegmentSize: gl.getUniformLocation(program, "uSegmentSize"),
+            })
+        }
+
+        // create ping-pong FBOs
+        const w = this.#canvas.width
+        const h = this.#canvas.height
+
+        const makeTex = () => {
+            const tex = gl.createTexture()
+            gl.bindTexture(gl.TEXTURE_2D, tex)
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+            return tex
+        }
+
+        const makeFbo = (tex) => {
+            const fbo = gl.createFramebuffer()
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
+            return fbo
+        }
+
+        this.#tex0 = makeTex()
+        this.#tex1 = makeTex()
+        this.#fbo0 = makeFbo(this.#tex0)
+        this.#fbo1 = makeFbo(this.#tex1)
+
+        // fullscreen quad VAO
+        const positions = new Float32Array([
+            -1, -1,  1, -1, -1,  1,
+            -1,  1,  1, -1,  1,  1,
+        ])
+        const uvs = new Float32Array([
+            0, 0,  1, 0,  0, 1,
+            0, 1,  1, 0,  1, 1,
+        ])
+
+        this.#vao = gl.createVertexArray()
+        gl.bindVertexArray(this.#vao)
+
+        const posBuf = gl.createBuffer()
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuf)
+        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW)
+        gl.enableVertexAttribArray(0)
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
+
+        const uvBuf = gl.createBuffer()
+        gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf)
+        gl.bufferData(gl.ARRAY_BUFFER, uvs, gl.STATIC_DRAW)
+        gl.enableVertexAttribArray(1)
+        gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0)
+
+        gl.bindVertexArray(null)
     }
 
     /**
-     * @param {Map<number, ImageBitmap>} images 
+     * @param {Map<number, ImageBitmap>} images
      */
     set_segments(images) {
-        let ctx = this.#canvas.getContext("2d")
-        ctx.clearRect(0, 0, this.#canvas.width, this.#canvas.height)
-        this.#segments.forEach((segment, i) => {
-            let img = images.get(i)
-            if(img) {
-                ctx.drawImage(img, segment.x, segment.y, segment.width, segment.height)
+        const gl = this.#gl
+        if(!gl) return
+
+        const w = this.#canvas.width
+        const h = this.#canvas.height
+
+        gl.viewport(0, 0, w, h)
+
+        // clear accumulator (fbo0) to transparent black
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.#fbo0)
+        gl.clearColor(0, 0, 0, 0)
+        gl.clear(gl.COLOR_BUFFER_BIT)
+
+        for(let i = 0; i < this.#segments.length; i++) {
+            const img = images.get(i)
+            if(!img) continue
+
+            const segment = this.#segments[i]
+            const program = this.#programs?.get(segment.combiner)
+            if(!program) continue
+
+            // upload or reuse segment texture
+            let texEntry = this.#segmentTexCache.get(i)
+            if(texEntry && texEntry.image !== img) {
+                gl.deleteTexture(texEntry.texture)
+                texEntry = null
             }
-        })
+            if(!texEntry) {
+                const tex = gl.createTexture()
+                gl.bindTexture(gl.TEXTURE_2D, tex)
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img)
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+                texEntry = { texture: tex, image: img }
+                this.#segmentTexCache.set(i, texEntry)
+            }
+
+            const uniforms = this.#uniforms.get(program)
+
+            gl.useProgram(program)
+
+            // copy accumulator (fbo0) to temp (fbo1) for safe reading
+            gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.#fbo0)
+            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.#fbo1)
+            gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST)
+
+            // read base from temp (tex1), write composited result to accumulator (fbo0)
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.#fbo0)
+            gl.activeTexture(gl.TEXTURE0)
+            gl.bindTexture(gl.TEXTURE_2D, this.#tex1)
+            gl.uniform1i(uniforms.uBase, 0)
+
+            // uOverlay = segment image
+            gl.activeTexture(gl.TEXTURE1)
+            gl.bindTexture(gl.TEXTURE_2D, texEntry.texture)
+            gl.uniform1i(uniforms.uOverlay, 1)
+
+            gl.uniform2f(uniforms.uCanvasSize, w, h)
+            gl.uniform2f(uniforms.uSegmentPos, segment.x, segment.y)
+            gl.uniform2f(uniforms.uSegmentSize, segment.width, segment.height)
+
+            // render to accumulator with scissor
+            gl.enable(gl.SCISSOR_TEST)
+            gl.scissor(segment.x, segment.y, segment.width, segment.height)
+
+            gl.bindVertexArray(this.#vao)
+            gl.drawArrays(gl.TRIANGLES, 0, 6)
+            gl.bindVertexArray(null)
+
+            gl.disable(gl.SCISSOR_TEST)
+        }
+
+        // blit final accumulator to canvas (Y-flipped for top-left canvas pixel order)
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.#fbo0)
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null)
+        gl.blitFramebuffer(0, 0, w, h, 0, h, w, 0, gl.COLOR_BUFFER_BIT, gl.NEAREST)
+
         this.texture.needsUpdate = true
     }
 }

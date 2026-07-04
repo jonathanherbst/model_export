@@ -23,6 +23,8 @@ type Model struct {
 	Elements          []ConfigElement
 	Materials         []Material
 	Images            []image.Image
+	Shaders           map[string]string
+	Combiners         map[string]Combiner
 }
 
 func (mdl Model) GetDefaultElements() []ConfigElement {

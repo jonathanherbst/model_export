@@ -8,7 +8,7 @@ Extension needs to support the configuration options.
 
 ## MDLE_SegmentedTexture
 
-This extension gets applied to a Material.  It defines that the material is made up of segments that get applied over each other to build the material.  A material defines _width_ and _height_ indicating the size of the material in pixels.  Each segment defines an area of the material that the segment is applied to, _x_ and _y_ define the coordinates of the top left corner of the area, and _width_ and _height_ define the extenst of the area from the top left corner.  Segments get applied in the order they are in the segment list, and are blended into the prevoius segments using the mode defined in the *blend_mode* field.  Images are bound to segments from the *MDLE_Configuration* elements.
+This extension gets applied to a Material.  It defines that the material is made up of segments that get applied over each other to build the material.  A material defines _width_ and _height_ indicating the size of the material in pixels.  Each segment defines an area of the material that the segment is applied to, _x_ and _y_ define the coordinates of the top left corner of the area, and _width_ and _height_ define the extenst of the area from the top left corner.  Segments get applied in the order they are in the segment list, and are blended into the prevoius segments using the mode defined in the *combiner* field.  *Combiners* are sets of shaders defined in the MDLE_Scene extension.  Images are bound to segments from the *MDLE_Configuration* elements.
 
 ```json
 {
@@ -20,7 +20,7 @@ This extension gets applied to a Material.  It defines that the material is made
       "y": 0,
       "width": 1024,
       "height": 1024,
-      "blend_mode": "overlay",
+      "combiner": "alpha_blend",
     }
   ]
 }
@@ -28,11 +28,7 @@ This extension gets applied to a Material.  It defines that the material is made
 
 Materials should have a default texture through the PBRMetallicRoughness field.  When building a new texture from the configuration options it should replace default texture, but keep the same sampler, and material configuration.
 
-### Blend Modes
-
-- **_overlay_**: the segment gets overlayed on top of the texture constructed thus far, blending by alpha channel.
-
-## MDLE_Configuration
+## MDLE_Scene
 
 This extension gets added to the document to define all the configuration choices for the scene and how they map to geosets and materials.  Choices have an option name which is shared between related choices.  Choices within an option are uniquely identified by the choice name and/or the color fields.  You can think of choices as an html _select_ element except option name is the label and choices are the individual options.
 
@@ -62,6 +58,25 @@ Static meshes are meshes that aren't affected by configurations, what this does 
       "meshes": [0]
     }
   ],
-  "static_meshes": [0, 1]
+  "static_meshes": [0, 1],
+  "shaders": {
+    "passthrough.vert": "<passthrough_script>",
+    "alpha_blend.frag": "<alpha_blend_script>",
+    "mod2x.frag": "<mod2x_script>"
+  },
+  "combiners": {
+    "mod2x": {
+      "vertex": "passthrough.vert",
+      "fragment": "mod2x.frag"
+    },
+    "alpha_blend": {
+      "vertex": "passthrough.vert",
+      "fragment": "alpha_blend.frag"
+    },
+  }
 }
 ```
+
+Shader scripts are stored in GLSL language, with a unique name.
+
+Combiners are a combination of a vertex and fragment shader, referenced by segmented textures to define how they are combined with previously combined layers.

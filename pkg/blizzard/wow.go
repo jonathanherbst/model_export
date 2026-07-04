@@ -1,6 +1,8 @@
 package blizzard
 
 import (
+	_ "embed"
+
 	"archive/zip"
 	"context"
 	"crypto/sha256"
@@ -18,6 +20,28 @@ import (
 
 	"github.com/google/go-github/v84/github"
 )
+
+//go:embed shaders/passthrough.vert
+var SHADER_VERTEX_PASSTHROUGH string
+
+//go:embed shaders/alpha_blend.frag
+var SHADER_FRAGMENT_ALPHA_BLEND string
+
+//go:embed shaders/mod2x.frag
+var SHADER_FRAGMENT_MOD2X string
+
+func loadShader(mdl *model.Model, name string) {
+	switch name {
+	case "passthrough.vert":
+		mdl.Shaders["passthrough.vert"] = SHADER_VERTEX_PASSTHROUGH
+	case "alpha_blend.frag":
+		mdl.Shaders["alpha_blend.frag"] = SHADER_FRAGMENT_ALPHA_BLEND
+	case "mod2x.frag":
+		mdl.Shaders["mod2x.frag"] = SHADER_FRAGMENT_MOD2X
+	default:
+		panic("unknown shader")
+	}
+}
 
 func IsWOWCasc(casc *Casc) bool {
 	return strings.HasPrefix(casc.ProductName, "wow")
@@ -164,6 +188,8 @@ func (wow *WOWCasc) LoadModelFromId(modelId int) *model.Model {
 		Elements:  make([]model.ConfigElement, 0),
 		Materials: make([]model.Material, 0),
 		Images:    make([]image.Image, 0),
+		Shaders:   make(map[string]string),
+		Combiners: make(map[string]model.Combiner),
 	}
 
 	modelFile, err := wow.Casc.OpenFileById(uint32(fileDataId), false)
@@ -385,25 +411,27 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 		}
 		layerMapping[textureTargetId] = []int{materialIdx, len(material.Segments)}
 
+		combiner := wow.loadBlendMode(mdl, textureLayer)
+
 		sectionTypeBitmask := textureLayer.GetIntFieldByName("TextureSectionTypeBitMask")
 		if sectionTypeBitmask == -1 {
 			material.Segments = append(material.Segments, model.TextureSegment{
-				X:         0,
-				Y:         0,
-				Width:     material.Width,
-				Height:    material.Height,
-				BlendMode: "overlay", // set them all to overlay for now
+				X:        0,
+				Y:        0,
+				Width:    material.Width,
+				Height:   material.Height,
+				Combiner: combiner, // set them all to overlay for now
 			})
 		} else {
 			for _, section := range textureSections {
 				sectionType := section.GetIntFieldByName("SectionType")
 				if (1<<sectionType)&sectionTypeBitmask != 0 {
 					material.Segments = append(material.Segments, model.TextureSegment{
-						X:         uint(section.GetIntFieldByName("X")),
-						Y:         uint(section.GetIntFieldByName("Y")),
-						Width:     uint(section.GetIntFieldByName("Width")),
-						Height:    uint(section.GetIntFieldByName("Height")),
-						BlendMode: "overlay", // set them all to overlay for now
+						X:        uint(section.GetIntFieldByName("X")),
+						Y:        uint(section.GetIntFieldByName("Y")),
+						Width:    uint(section.GetIntFieldByName("Width")),
+						Height:   uint(section.GetIntFieldByName("Height")),
+						Combiner: combiner, // set them all to overlay for now
 					})
 				}
 			}
@@ -522,6 +550,28 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 			Option: "Bra",
 			Choice: "None",
 		})
+	}
+}
+
+func (wow *WOWCasc) loadBlendMode(mdl *model.Model, textureLayer DBDRecord) string {
+	blendMode := textureLayer.GetIntFieldByName("BlendMode")
+	switch blendMode {
+	case 6: // Overlay (mod2x)
+		loadShader(mdl, "passthrough.vert")
+		loadShader(mdl, "mod2x.frag")
+		mdl.Combiners["mod2x"] = model.Combiner{
+			Vertex:   "passthrough.vert",
+			Fragment: "mod2x.frag",
+		}
+		return "mod2x"
+	default:
+		loadShader(mdl, "passthrough.vert")
+		loadShader(mdl, "alpha_blend.frag")
+		mdl.Combiners["alpha_blend"] = model.Combiner{
+			Vertex:   "passthrough.vert",
+			Fragment: "alpha_blend.frag",
+		}
+		return "alpha_blend"
 	}
 }
 

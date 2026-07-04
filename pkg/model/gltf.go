@@ -281,10 +281,12 @@ func ExportGLTF(mdl Model, path string) error {
 	}
 
 	doc.Extensions = gltf.Extensions{
-		CONFIGURATION_NAME: ConfigExtension{
+		SCENE_NAME: SceneExtension{
 			Choices:      mdl.Choices,
 			Elements:     elements,
 			StaticMeshes: static_meshes,
+			Shaders:      mdl.Shaders,
+			Combiners:    mdl.Combiners,
 		},
 	}
 
