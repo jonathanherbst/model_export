@@ -30,7 +30,9 @@ To be able to get everything the application needs from a WoW install it has to 
 - wow-listfile.csv: The latest listfile from https://github.com/wowdev/wow-listfile/, needed to find the correct database files in your local wow install (casc).
 - wow-dbd.zip: The latest database definitions from https://github.com/wowdev/WoWDBDefs, needed to parse the database files in your local wow install (casc).
 
-The exported glb files use a custom gltf extension that's not supported by any other programs so the project has a ui to handle the extension properly.  It just requires nodejs to run https://nodejs.org/en/download, dependencies are also included in the devcontainer so you can run it that way too.
+The exported glb files use a custom gltf extension that's not supported by any other programs so the project has a ui to handle the extension properly.  I've setup github to host the ui, you can access it here, https://jonathanherbst.github.io/model_export/, it's just a client only app that displays glb files, and doesn't steal your data or anything like that.
+
+You can also build and run the ui yourself, it just requires nodejs to run https://nodejs.org/en/download, dependencies are also included in the devcontainer so you can run it that way too.
 
 ``` sh
 cd viewer
