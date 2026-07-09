@@ -52,7 +52,7 @@ const closePanelBtn = document.getElementById('closePanelBtn');
 const openPanelBtn = document.getElementById('openPanelBtn');
 const uiPanel = document.getElementById('ui-panel');
 
-const clock = new THREE.Clock();
+const clock = new THREE.Timer();
 let currentModel = null;
 let isSeeking = false;
 let mixer = null;
@@ -423,6 +423,7 @@ window.addEventListener('resize', () => {
 function animate() {
   requestAnimationFrame(animate);
 
+  clock.update();
   const delta = clock.getDelta();
   if (mixer) {
     mixer.update(delta);
