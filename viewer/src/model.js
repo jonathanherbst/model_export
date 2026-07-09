@@ -69,6 +69,7 @@ export class Model {
             })
         })
         this.#static_meshes = this.#gltf.load_static_meshes()
+        this.randomizeExclusions = this.#gltf.load_randomize_exclusions()
     }
 
     get scene() {
@@ -253,6 +254,14 @@ class ModelExportGLTF {
         const ext_configs = this.gltf.userData.gltfExtensions?.MDLE_Scene
         if(ext_configs) {
             return new Set(ext_configs.static_meshes)
+        }
+        return new Set()
+    }
+
+    load_randomize_exclusions() {
+        const ext_configs = this.gltf.userData.gltfExtensions?.MDLE_Scene
+        if (ext_configs?.randomize_exclusions) {
+            return new Set(ext_configs.randomize_exclusions)
         }
         return new Set()
     }

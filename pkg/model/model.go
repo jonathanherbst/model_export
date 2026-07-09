@@ -9,22 +9,23 @@ import (
 )
 
 type Model struct {
-	VertexPositions   []mgl32.Vec3
-	VertexNormals     []mgl32.Vec3
-	VertexBones       [][4]uint8
-	VertexBoneWeights [][4]uint8
-	VertexTexCoords_0 []mgl32.Vec2
-	VertexTexCoords_1 []mgl32.Vec2
-	Skin              *Skin
-	Skeleton          *Skeleton
-	BoundingBox       *[2]mgl32.Vec3
-	Animations        []Animation
-	Choices           []ConfigChoice
-	Elements          []ConfigElement
-	Materials         []Material
-	Images            []image.Image
-	Shaders           map[string]string
-	Combiners         map[string]Combiner
+	VertexPositions     []mgl32.Vec3
+	VertexNormals       []mgl32.Vec3
+	VertexBones         [][4]uint8
+	VertexBoneWeights   [][4]uint8
+	VertexTexCoords_0   []mgl32.Vec2
+	VertexTexCoords_1   []mgl32.Vec2
+	Skin                *Skin
+	Skeleton            *Skeleton
+	BoundingBox         *[2]mgl32.Vec3
+	Animations          []Animation
+	Choices             []ConfigChoice
+	RandomizeExclusions []string
+	Elements            []ConfigElement
+	Materials           []Material
+	Images              []image.Image
+	Shaders             map[string]string
+	Combiners           map[string]Combiner
 }
 
 func (mdl Model) GetDefaultElements() []ConfigElement {

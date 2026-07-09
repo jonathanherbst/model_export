@@ -543,12 +543,14 @@ func (wow *WOWCasc) loadConfigurationOptions(mdl *model.Model, modelRecord DBDRe
 	}
 
 	if len(underwearOptions) > 0 {
+		mdl.RandomizeExclusions = append(mdl.RandomizeExclusions, "Underwear")
 		mdl.Choices = append(mdl.Choices, model.ConfigChoice{
 			Option: "Underwear",
 			Choice: "None",
 		})
 	}
 	if len(braOptions) > 0 {
+		mdl.RandomizeExclusions = append(mdl.RandomizeExclusions, "Bra")
 		mdl.Choices = append(mdl.Choices, model.ConfigChoice{
 			Option: "Bra",
 			Choice: "None",

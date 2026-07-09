@@ -295,7 +295,8 @@ async function loadModel(url) {
             const ids = configPanelApi.getCurrentChoices();
             model.set_enabled_choices(new Set(ids));
           }
-        }
+        },
+        model.randomizeExclusions
       );
 
       const defaultIds = [];

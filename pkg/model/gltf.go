@@ -282,16 +282,17 @@ func ExportGLTF(mdl Model, path string) error {
 
 	doc.Extensions = gltf.Extensions{
 		SCENE_NAME: SceneExtension{
-			Choices:      mdl.Choices,
-			Elements:     elements,
-			StaticMeshes: static_meshes,
-			Shaders:      mdl.Shaders,
-			Combiners:    mdl.Combiners,
+			Choices:             mdl.Choices,
+			RandomizeExclusions: mdl.RandomizeExclusions,
+			Elements:            elements,
+			StaticMeshes:        static_meshes,
+			Shaders:             mdl.Shaders,
+			Combiners:           mdl.Combiners,
 		},
 	}
 
 	doc.Cameras = []*gltf.Camera{
-		&gltf.Camera{
+		{
 			Perspective: &gltf.Perspective{
 				Yfov:  70,
 				Znear: 0.01,

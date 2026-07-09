@@ -32,6 +32,8 @@ Materials should have a default texture through the PBRMetallicRoughness field. 
 
 This extension gets added to the document to define all the configuration choices for the scene and how they map to geosets and materials.  Choices have an option name which is shared between related choices.  Choices within an option are uniquely identified by the choice name and/or the color fields.  You can think of choices as an html _select_ element except option name is the label and choices are the individual options.
 
+Choices can be randomized, but some of them shouldn't be so there is a *randomize_exclusions* field, which is an array of option names that should not be randomized when using a choice randomization.
+
 Elements define how choices map to geosets and materials.  Each element has a list of choice indices within the choices list, all of which should be selected by the UI for the element to be applied.  Applying the element requires enabling all the materials defined in the materials list and the mesh ids defined in the meshes list.  A material has an index into the document materials array which points to a segmented texture material, the segment field defines an index into the material's segments array, and the image field defines an index into the document's image list to be applied to the material using the segment definition.
 
 Static meshes are meshes that aren't affected by configurations, what this does is help the renderer figure out what meshes to enable before applying configurations.
@@ -44,6 +46,9 @@ Static meshes are meshes that aren't affected by configurations, what this does 
       "choice": "<choice_name>",
       "color": 0x01234567
     }
+  ],
+  "randomize_exclusions": [
+    "<option_name>"
   ],
   "elements": [
     {

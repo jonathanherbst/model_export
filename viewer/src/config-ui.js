@@ -9,7 +9,7 @@ function uint32ToCss(color) {
   return `rgba(${r},${g},${b},${(a / 255).toFixed(2)})`;
 }
 
-export function setupConfigPanel(configurations, onChange) {
+export function setupConfigPanel(configurations, onChange, randomizeExclusions = new Set()) {
   const configPanel = document.createElement('div');
   configPanel.id = 'config-panel';
   configPanel.className = 'collapsible';
@@ -21,6 +21,14 @@ export function setupConfigPanel(configurations, onChange) {
 
   const panelBody = document.createElement('div');
   panelBody.className = 'config-body';
+
+  const randomizeBtn = document.createElement('button');
+  randomizeBtn.type = 'button';
+  randomizeBtn.textContent = 'Randomize';
+  randomizeBtn.addEventListener('click', () => {
+    randomizeChoices();
+  });
+  panelBody.appendChild(randomizeBtn);
 
   const defaultValueIds = new Set();
   for (const [, choices] of configurations) {
@@ -107,6 +115,23 @@ export function setupConfigPanel(configurations, onChange) {
   configPanel.appendChild(header);
   configPanel.appendChild(panelBody);
   document.getElementById('ui-panel').appendChild(configPanel);
+
+  function randomizeChoices() {
+    const groups =
+      panelBody.querySelectorAll('.config-option-group');
+    groups.forEach((group) => {
+      const firstChoice = group.querySelector('.config-choice');
+      const optionName = firstChoice?.dataset.option;
+      if (optionName && randomizeExclusions.has(optionName))
+        return;
+      const choices = group.querySelectorAll('.config-choice');
+      if (choices.length <= 1) return;
+      const randomIdx = Math.floor(Math.random() * choices.length);
+      choices.forEach((c) => c.classList.remove('selected'));
+      choices[randomIdx].classList.add('selected');
+    });
+    onChange();
+  }
 
   return {
     getCurrentChoices() {

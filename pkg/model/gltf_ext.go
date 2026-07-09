@@ -19,11 +19,12 @@ type SegmentedTexture struct {
 const SCENE_NAME string = "MDLE_Scene"
 
 type SceneExtension struct {
-	Choices      []ConfigChoice      `json:"choices"`
-	Elements     []ConfigElement     `json:"elements"`
-	StaticMeshes []int               `json:"static_meshes"`
-	Shaders      map[string]string   `json:"shaders"`
-	Combiners    map[string]Combiner `json:"combiners"`
+	Choices             []ConfigChoice      `json:"choices"`
+	RandomizeExclusions []string            `json:"randomize_exclusions"`
+	Elements            []ConfigElement     `json:"elements"`
+	StaticMeshes        []int               `json:"static_meshes"`
+	Shaders             map[string]string   `json:"shaders"`
+	Combiners           map[string]Combiner `json:"combiners"`
 }
 
 type ConfigChoice struct {
